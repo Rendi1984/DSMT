@@ -282,6 +282,14 @@ Start-PodeServer {
         catch { Set-PodeResponseStatus -Code 400; Write-PodeJsonResponse -Value @{ error=$_.Exception.Message } }
     }
 
+    # ---------- PASSWORD EXPIRY REPORT ----------
+    Add-PodeRoute -Method Get -Path '/api/passwords/expiring' -ScriptBlock {
+        if (-not (Get-Session $WebEvent)) { Write-401; return }
+        $days = if ($WebEvent.Query['days']) { [int]$WebEvent.Query['days'] } else { 30 }
+        try { Write-PodeJsonResponse -Value @{ users = @(Get-ExpiringPasswords -Days $days) } }
+        catch { Set-PodeResponseStatus -Code 400; Write-PodeJsonResponse -Value @{ error=$_.Exception.Message } }
+    }
+
     # ---------- USERS ----------
     Add-PodeRoute -Method Get -Path '/api/users' -ScriptBlock {
         if (-not (Get-Session $WebEvent)) { Write-401; return }

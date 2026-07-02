@@ -1,5 +1,10 @@
 # Changelog
 All notable changes to the Directory Services Management Tool.
+## 3.23.0
+- **New page: Password Expiry Report.** Lists enabled AD users (not `PasswordNeverExpires`) whose password expires within a configurable window (30 days by default), with username, display name, OU, days remaining and expiry date.
+  - **API:** new `GET /api/passwords/expiring?days=30` route.
+  - **Directory.psm1:** `Get-ExpiringPasswords` now also returns `name`/`ou`/`expiresOn` (previously only `sam`/`daysLeft`); the existing `/api/alerts` caller is unaffected since it only reads `sam`/`daysLeft`.
+  - Known limitation: expiry is computed from the domain-wide default password policy (`Get-ADDefaultDomainPasswordPolicy`) and does not account for fine-grained password policies (PSOs) that override it for specific users/groups.
 ## 3.22.7
 - **API: fixed 500 on `/api/db/info` (and any authenticated route) when SQL-login auth is broken/untested.** `Get-Session` queried `dbo.Sessions` with no try/catch, so an unreachable or mis-authenticated SQL Server threw an unhandled `SqlException` before the route's own error handling ever ran, and Pode returned a raw 500 instead of a clean 401. `Get-Session` now catches SQL failures and treats the request as unauthenticated.
 - **API: `POST /api/db/config` now persists `User`/`Password`.** Previously only `host/port/name/auth/encrypt` were saved, so switching Database auth mode to SQL Login in Settings silently dropped the credentials, guaranteeing the broken-auth state above.
