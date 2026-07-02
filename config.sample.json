@@ -1,0 +1,44 @@
+{
+  "_comment": "BOOTSTRAP CONFIG. Only 'Api' and 'Database' are required to start - everything else is configured in the console (Settings, stored in SQL) once the database is connected. The first-run wizard writes the Database block for you; you normally never edit this by hand.",
+
+  "Api": {
+    "ListenAddress": "0.0.0.0",
+    "Port": 8780,
+    "Protocol": "http",
+    "CorsOrigins": ["*"],
+    "TokenTtlHours": 8,
+    "CertThumbprint": ""
+  },
+
+  "_database_comment": "Filled in by the first-run wizard (Settings -> Database). This is the ONE thing that can't live in SQL - the API needs it to reach SQL in the first place. Leave Server/Name blank to start the API in SETUP MODE.",
+  "Database": {
+    "Engine": "SQL Server",
+    "Server": "",
+    "Port": 1433,
+    "Name": "",
+    "Auth": "Windows",
+    "User": "",
+    "Password": "",
+    "Encrypt": false,
+    "TrustServerCertificate": true
+  },
+
+  "_managed_in_gui_comment": "The keys below are OPTIONAL fallbacks only. The live values are managed in the console (Settings) and stored in SQL: directory/LDAP, sign-in domains, MFA & SSO toggles, AD Connect server, Certificate Authority config string, role mappings and secrets. They are seeded on first DB creation and editable in the GUI thereafter.",
+  "Directory": {
+    "LdapServer": "dc01.lab.local",
+    "BaseDN": "DC=lab,DC=local",
+    "UseSsl": false,
+    "Domains": ["lab.local", "corp.lab.local"],
+    "BindUser": "",
+    "BindPassword": ""
+  },
+
+  "Sync": {
+    "ADConnectServer": "ADC-SYNC-01"
+  },
+
+  "CertificateAuthority": {
+    "ConfigString": "CA-01.lab.local\\lab-Enterprise-CA"
+  }
+}
+
