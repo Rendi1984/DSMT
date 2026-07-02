@@ -1,0 +1,150 @@
+# Changelog
+All notable changes to the Directory Services Management Tool.
+## 3.22.6
+- **API: added 8 missing routes** that the console's Live-mode calls but the backend didn't expose:
+  - `POST /api/users/:sam/lock` — lock (disables the account) / unlock (re-enables + clears lockout) a user via AD.
+  - `POST /api/users` — create a new AD user with a random initial password (returned in the response).
+  - `POST /api/groups/:name/members` — add a member to an AD security/distribution group.
+  - `DELETE /api/groups/:name/members/:sam` — remove a member from a group.
+  - `POST /api/jobs/:name/toggle` — enable or disable a Windows Scheduled Task by name.
+  - `POST /api/jobs/:name/run` — run a Scheduled Task immediately.
+  - `POST /api/config` — persist General settings (directory LDAP/BaseDN) to `config.json`.
+  - `POST /api/ca/config` — persist CA host + common name to `config.json`.
+  - `POST /api/db/config` — persist database host/port/name to `config.json`.
+- **API: fixed CORS failure masking 401 responses.** All 31 unauthenticated responses now use `Write-401` (a helper that stamps `Access-Control-Allow-*` headers before returning 401) so browsers never see a spurious CORS error when the real issue is an expired/missing token.
+- **API: added DELETE to `Access-Control-Allow-Methods`** so the group-member-remove route (`DELETE /api/groups/...`) clears CORS preflight correctly.
+
+Versioning: **MAJOR.FEATURE.FIX** — 1st = major/version change, 2nd = feature added, 3rd = bug fix.
+
+## 3.22.4
+- **Runtime SQL connections fail fast (5s) instead of hanging the API.** The runtime connection string had no connect timeout, so an unreachable / mis-authenticated SQL server (e.g. `sa` against a server not in Mixed Mode, or a blocked 1433) left requests hanging for 30–60s, blocking the Pode worker and cascading into `408` timeouts + spurious CORS-preflight failures in the browser. Added `Connect Timeout=5` to the runtime string (the probe/test paths were already 5s). Failures now return quickly **and** get written to `logs\dsmt-sql.log`.
+
+## 3.22.3
+- **Fixed the console rendering blank on older browsers** (e.g. legacy Edge / Windows Server's built-in browser). The DC runtime built a `:not(a,abbr,b,…)` selector-list inside `:not()` — valid only on Chromium 88+/2021+ engines; older browsers threw `'…' is not a valid selector`, the template compile failed, and the page stayed blank. Replaced it with an equivalent descendant scan (`getElementsByTagName('*')` + tag-set test) that works on any browser. (Best experience is still a modern Chromium-based Edge/Chrome.)
+- **Uninstaller keeps logs by default.** The `logs` folder under the install dir is now preserved on uninstall for post-mortem troubleshooting; pass `-RemoveLogs` to delete it too. (Replaces the old opt-in `-KeepLogs`.)
+
+## 3.22.2
+- **Clearer SQL-connection failure at install.** Step "Create database" now prints the (password-redacted) connection string before connecting, and on an SSPI / "target principal name is incorrect" error prints actionable guidance — including that this build connects with `Encrypt=False` (so if the printed line shows `Encrypt=True` you're running an old copy), plus the SQL-auth and SPN/time-sync alternatives. Helps catch the common case of running a stale installer copy.
+
+## 3.22.1
+- **Uninstaller database-drop safeguard.** Even with `-RemoveDatabase` (and even under `-Yes`), the uninstaller now requires the operator to **retype the exact database name** before it will `DROP DATABASE`; anything else skips the drop and leaves the database intact. The database is never touched without both the explicit `-RemoveDatabase` switch and this typed confirmation.
+
+## 3.22.0
+- **Added an uninstaller.** Double-click **`Uninstall.cmd`** (self-elevates via UAC) — or run `Uninstall-DSMT.ps1` — to stop **and delete** the `DSMT-Api` service (deleting frees the service `.exe`), kill any orphaned host process, and remove the install folder `C:\Program Files\DSMT`. Optional switches: `-RemoveIisSite` (remove the IIS site + `C:\inetpub\dsmt`), `-RemoveFirewall` (remove the DSMT firewall rules), `-RemoveDatabase` (prompts for server/name, then `DROP DATABASE`), `-KeepLogs`, and `-Yes` (no prompt). The SQL database is left intact unless `-RemoveDatabase` is passed; if the script is run from inside the install folder it relaunches a temp copy so it can finish deleting without removing itself mid-run.
+
+## 3.21.3
+- **Fixed install failing at "Create database" with `The target principal name is incorrect. Cannot generate SSPI context`.** The installer forced `Encrypt=True` on the SQL connection; connecting to an on-prem SQL by name with TLS (and a server cert whose name doesn't match) trips that SSPI/cert-identity error. SQL encryption now **defaults off** (`Encrypt=False`, `TrustServerCertificate=True`) — matching the runtime that connected successfully — across the installer's master connection, the `config.json` it writes, `config.sample.json`, and the console's default. Re-enable TLS with the new `-EncryptSql` switch (or the console's "Encrypt connection (TLS)" toggle) once a valid SQL certificate is in place.
+
+## 3.21.2
+- **Fixed CORS preflight failing for authenticated calls** (e.g. `/api/db/info` → "Response to preflight request doesn't pass access control check: No 'Access-Control-Allow-Origin' header"). The hand-rolled CORS middleware answered `OPTIONS` itself, but some Pode builds skip global middleware for an `OPTIONS` path that has no matching route, so the preflight came back without the header and the browser blocked the request. Now an explicit catch-all `OPTIONS *` route guarantees preflights are routed (middleware runs and stamps the CORS headers, then 204). The cross-origin console→API calls (console on :8080, API on :8780) work again.
+
+## 3.21.1
+- **SQL error logging.** The data layer now writes connection/query failures to **`<InstallDir>\logs\dsmt-sql.log`** (passwords redacted) — so a "SQL database: down" / Login-failed problem is captured with the exact message and the (sanitised) connection string. Hooks in `New-SqlConnection`, `Test-SqlServer` and `Get-DbInfo`.
+- Database tab honesty: in **Live** mode when the database isn't connected, the Schema/Maintenance cards now show `—` instead of the demo sample values (v14 / 312 MB / etc.), so a failed Live connection is never mistaken for real data.
+
+## 3.21.0
+- **Installer auto-grants the service account SQL access.** A fresh install created the database with the *installer admin's* credentials, but the `DSMT-Api` service runs as **NetworkService** — which connects to SQL as the **computer account** `DOMAIN\<host>$` (or your `-ServiceAccount`), an identity that had no SQL login. That produced `Login failed for user 'DOMAIN\<host>$'` and a "SQL database: down" health check. The installer now, right after creating the schema, creates a Windows **login** for the service's runtime identity and adds it to **db_datareader + db_datawriter** on the app database (best-effort; if the installer isn't a SQL sysadmin it prints the exact manual `CREATE LOGIN`/`ALTER ROLE` statements). Skipped when SQL authentication is used (the SQL login already governs access).
+
+## 3.20.0
+- **Service & API logging for troubleshooting.** When `DSMT-Api` failed to come up there was no way to see why (the native host just respawned the process silently, and a route error showed only a bare Pode "500"). Now: (1) the native service host **captures the API process's stdout/stderr** plus lifecycle events (start, exit code, restart, stop) to **`<InstallDir>\logs\dsmt-service.log`**; (2) the API enables **Pode file logging** (errors + requests) to the same `logs` folder, so route 500s get a stack trace; (3) the installer creates `<InstallDir>\logs` and grants the service account **Modify** on it (Program Files is otherwise read-only for NetworkService). Applied to both `Install-DSMT.ps1` and `Install.ps1`.
+- **Hardened `/api/health`** so it no longer returns 500 on a minimal/bootstrap `config.json`: the LDAP and AD-Connect checks are guarded against missing `Directory`/`Sync` sections and wrapped so a sync probe failure degrades to a `warn` check instead of failing the whole route.
+- The installer no longer stages a duplicate `index.html` under `C:\Program Files\DSMT`; the console is deployed straight to IIS (`C:\inetpub\dsmt`) from the source file.
+
+## 3.19.0
+- **Certificate Authority and Diagnostics are now real in Live mode.** Like the Database tab in 3.18.0, these screens were client-side simulations that always reported success; in Live mode they now call the backend (which already exposed these routes): **Test CA** → `POST /api/ca/ping` (a wrong host/CA name now fails instead of always "Reachable"), **Diagnostics → Domain Controllers** → `GET /api/diag/dcs?method=` (discovers DCs and probes NTDS/DNS/Netlogon/KDC/W32Time/DFSR/ADWS on the real servers), **Diagnostics → Exchange** → `POST /api/diag/exchange` (per-host component health), **Test message** → `POST /api/diag/message` (real authenticated/TLS SMTP send, or a real route check when Simulate is on). Demo mode keeps the built-in sample results.
+
+## 3.18.0
+- **Database tab is now real in Live mode (no more demo values).** Previously the Settings → Database tab showed hard-coded sample values (`SQL-01`, schema v14, 312 MB, "Today 02:00") and its "Test server connection"/"Test connection" buttons were client-side simulations that always reported success — even for a non-existent server. In Live mode the tab now drives the backend: on sign-in it loads `/api/db/info` and shows the **real** configured SQL server/host/port, database name, schema version, database size, last backup time and recovery model; **Test server connection** → `POST /api/db/test` + `/api/db/list` (a fake server now correctly fails), **Test connection** → `/api/db/info` probe of the real database, **Create database** → `/api/db/create`, **Run migrations** → `/api/db/migrate` (re-applies `schema.sql` idempotently), **Back up now** → `/api/db/backup` (full backup to the instance default backup path). Demo mode keeps the built-in sample behaviour. New backend functions `Get-DbInfo` / `Invoke-DbBackup` / `Invoke-DbMigrate` and routes `/api/db/info`, `/api/db/migrate`, `/api/db/backup`.
+- **Installer deploys to a permanent location.** `Install-DSMT.ps1` now copies the whole `server\` folder **and** the offline console to `C:\Program Files\DSMT` (override with `-InstallDir`, skip with `-SkipDeploy`) before writing config, creating the DB and registering the service — so the `DSMT-Api` service no longer runs from the temp/copy folder you launched the installer from (config, schema, service `.exe` and console all live under the install dir). Added `InstallDir`/`SkipDeploy` to the unattended answers file and bootstrap.
+
+## 3.17.2
+- **Fixed the service install crashing with `Unrecognized escape sequence`** during Step 6 (native service host compilation). The generated C# set `psi.Arguments` with a regular string literal, so backslashes in the API script path (e.g. `C:\Temp\...\DSMT.Api.ps1`) were parsed as invalid C# escapes and `Add-Type` failed for any real path. Switched that line to a C# verbatim string (`@"... ""__API__"" "`). The bug surfaced for every install once NSSM was removed in 3.17.1 (the native path is now always used). Applied to both `Install-DSMT.ps1` and `Install.ps1`.
+
+## 3.17.1
+- **Removed NSSM from the install entirely.** The service `DSMT-Api` is now always registered via the compiled native service host (in-box .NET compiler) — the optional NSSM detect/use branch and the `-NssmPath` parameter were dropped from both `Install-DSMT.ps1` and `Install.ps1` for a single, predictable install path. No third-party tools needed. Updated the Deployment Guide and `server/README.md` wording.
+
+## 3.17.0
+- **Automatic Windows service — no NSSM required.** The installer no longer silently skips service registration when `nssm.exe` is missing. It now compiles a tiny **native Windows service host** with the in-box .NET compiler (`Add-Type … -OutputAssembly DSMT-Api-Service.exe`) and registers `DSMT-Api` as a real auto-start service that launches the API and restarts it if it exits. NSSM is still used automatically if present. Re-runs cleanly remove the old registration first (`sc.exe delete`). Default logon account is **NetworkService**; pass `-ServiceAccount` (gMSA/domain) or change it afterward in `services.msc` → Log On. Added crash-recovery actions (`sc.exe failure … restart`). Applied to both `Install-DSMT.ps1` and `Install.ps1`.
+- Deployment Guide: added a **"Service account — required permissions"** section (Log on as a service, SQL db_datareader/db_datawriter, delegated AD write on target OUs, CA Issue & Manage, ADSyncOperators).
+
+## 3.16.0
+- Added a **one-click installer** at the project root: double-click **`Install.cmd`** and it self-elevates (UAC prompt — no more "Run as administrator"), sets the execution policy for that run only, and runs `server\Install-DSMT.ps1` end to end. The bootstrap **`Start-Install.ps1`** does the work and can read an optional **`install-answers.sample.json`** → `install-answers.json` for a fully unattended, zero-prompt install (values map 1:1 to the installer's parameters; passwords left blank are prompted securely). Copy the whole project folder to the app server and run the one file. Deployment Guide updated with the new flow and file trees.
+
+## 3.15.2
+- Fixed `Install-DSMT.ps1` (Step 4) crashing on a **re-run** with `index ... 'IX_AuditLog_Time' already exists on table 'dbo.AuditLog'`. The `CREATE INDEX` in `sql/schema.sql` is now guarded with `IF NOT EXISTS (sys.indexes ...)`, so the schema step is fully idempotent.
+- Fixed the prerequisites step stopping at an interactive `NuGet provider is required to continue ... [Y/N]` prompt during online Pode install. The installer now force-installs the NuGet package provider and trusts PSGallery up front (TLS 1.2 enabled, `Install-Module ... -Confirm:$false -AllowClobber`), so an unattended run no longer blocks. Applies to both `Install-DSMT.ps1` and `Install.ps1`.
+
+## 3.15.1
+- **Windows / SSO sign-in now defaults to OFF.** New installs seed `AllowSsoSignIn = false` (SQL seed + `Install-DSMT.ps1` config), and the console's Access & Permissions toggle starts disabled, so the "Sign in with Windows (SSO)" button is hidden until an admin explicitly turns it on. Existing databases keep their current setting.
+
+## 3.15.0
+- Removed the redundant **`server/Setup-Backend.ps1`** and **`server/Setup-Frontend.ps1`** one-shot wrappers — the all-in-one `Install-DSMT.ps1` covers every deployment step (use its `-SkipPrereqs` / `-SkipService` / `-SkipFrontend` switches for partial installs). The granular `Install.ps1` building blocks (`-Prereqs` / `-InitDb` / `-SeedLocalAdmin` / `-RegisterService`) remain for one-stage-at-a-time runs. Updated the Deployment Guide file listings and tree accordingly.
+
+## 3.14.0
+- Added **`server/Install-DSMT.ps1`** — a single all-in-one installer that runs every deployment step end to end (prerequisites: RSAT-AD + Pode + NSSM; write `config.json`; create the SQL database + schema; seed the local break-glass admin; register + start the API as a Windows service; deploy the offline console to IIS). Prompts interactively for any required value not passed on the command line, everything else uses sensible defaults; idempotent on re-run; `-SkipPrereqs` / `-SkipService` / `-SkipFrontend` switches. Windows PowerShell 5.1-safe, ASCII only. Replaces the need to run `Setup-Backend.ps1` + `Setup-Frontend.ps1` separately (those remain for granular use).
+
+## 3.13.4
+- Fixed `Setup-Frontend.ps1` failing with "Console file not found: .\index.html". The default `-ConsoleFile` now resolves to the offline `index.html` in the project root (one level up from `server\`) relative to the script, so it works from any current directory.
+
+## 3.13.3
+- Fixed `DSMT.Api.ps1` crashing at startup with `Find-PodeScopedVariableUsingVariableValue ... "Key cannot be null"`. Two causes addressed: (1) Pode's `$using:` resolver on Windows PowerShell 5.1 only reliably captures variables defined **inside** the `Start-PodeServer` scriptblock — `$Config`/`$here`/`$cs` are now bound there; (2) member-access `$using:` expressions (e.g. `$using:Config.Database.Server`) were replaced with a single `$cfg = $using:Config` capture per route, then plain member access.
+- Fixed every DB-backed endpoint failing in Pode's per-route runspaces (where `Db.psm1` is re-imported with a null connection string): `New-SqlConnection` now lazily re-initialises the connection from `config.json` (resolved relative to the module) on first use.
+
+## 3.13.2
+- Fixed PowerShell parse errors (`Missing closing ')'`, `The string is missing the terminator`) when running `Setup-Backend.ps1` and other server scripts. Cause: em-dashes and other non-ASCII characters in string literals — Windows PowerShell 5.1 reads files as ANSI and mangled the multi-byte UTF-8 bytes. Replaced all non-ASCII with ASCII equivalents across every `.ps1`/`.psm1`, `config.sample.json`, and `schema.sql`.
+
+## 3.13.0
+- Alerts panel: added a **Clear all** button in the header and a per-item **×** dismiss control. Dismissed alerts are tracked by key in `dismissedAlerts` state and filtered out of `computeAlerts()`; the bell badge count updates accordingly.
+
+## 3.12.0
+- Added a **Tweaks panel** for the console (props on the root component): **Accent color** (curated swatches — the whole UI keys off it), **Density** (Comfortable ↔ Compact, drives the content `--pad`), and **Logo size** (Small / Medium / Large for the login and sidebar logo). Read with fallbacks in `renderVals()`; no effect on the deployed offline behaviour beyond the chosen defaults.
+
+## 3.11.1
+- Certificate Authority: removed the **Publish CRL** action for now, pending a redesign of CRL/CDP handling for split-tier PKI (offline Root CA + Sub CAs + dedicated CRL/CDP servers).
+
+## 3.11.0
+- Diagnostics streamlined to two tabs (Domain Controllers, Exchange). The **Test message** tool now lives inside the Exchange tab behind an optional toggle (hidden until enabled), and gained an editable **message body** field.
+- Exchange health now accepts **multiple hosts** (one per line / comma-separated) and shows a result card per server. Added guidance: behind a load balancer (F5 / Avi / NetScaler), list the real member servers — service health can't be read through a VIP. Backend `/api/diag/exchange` accepts a `hosts` array.
+
+## 3.10.0
+- Diagnostics → Test message now supports **authenticated SMTP** (username + password) and **TLS/STARTTLS**, for relays that require credentials. Backend `Send-TestMessage` gained `-Username/-Password/-UseTls`.
+- Deployment Guide: clarified that `config.json` is auto-created on first run and lives in `C:\DSMT\server\`; documented the wizard-writes-it path vs. hand-editing; added a 403-Forbidden (IIS) troubleshooting box.
+
+## 3.9.0
+- New **Diagnostics** workspace (System Team): domain-controller health (discovers DCs via native lookup, the Domain Controllers group, or the DC OU; probes NTDS/DNS/Netlogon/KDC/W32Time/DFSR/ADWS), Exchange component health, and a Test-message tool with a Simulate option. Backed by `Diagnostics.psm1` + `/api/diag/*`.
+- **Secrets**: add/update service accounts (DOMAIN\\user + password) from the GUI, stored DPAPI-encrypted in SQL (`Secrets.psm1`, `/api/secrets`).
+- **GUI-first bootstrap**: the API now starts in *setup mode* when no database is configured and exposes `/api/setup/*` so the first-run wizard writes `config.json` for you — no hand-editing. `config.sample.json` trimmed to a bootstrap minimum (only Api + Database required; everything else managed in Settings/SQL).
+- Requirements screen corrected: Windows PowerShell 5.1 (.NET Framework, built into Windows) instead of the misleading “.NET 8”.
+- Offline Pode install path bundled for air-gapped servers.
+
+## 3.8.4
+- Default database name changed from `HafalaTools` to **`DSMTOOL`** (clearer, product-aligned) across the console, SQL schema, installer, config sample and Deployment Guide. Security-group names are unaffected.
+
+## 3.8.3
+- Cleanup: removed the legacy **FontSizeOffset** field from General settings. It was carried over from the original PowerShell script and did nothing in the web console (text scaling is handled by the theme/density controls).
+
+## 3.8.2
+- Fix: the Database settings panel (and first-run DB step) showed an empty gray box in the deployed offline build. The DB connection form was a separate imported component that the offline bundler did not inline; it is now built directly into the console so it renders everywhere (demo, live, and the standalone offline file).
+
+## 3.8.1
+- Fix: DSMT.Api.ps1 used the PowerShell 7 `??` operator on the /api/ca/revoke route, which broke parsing on Windows PowerShell 5.1. Replaced with 5.1-compatible code. Run the API with `.\DSMT.Api.ps1` (no pwsh required).
+
+## 3.8.0
+- Browser compatibility guard: unsupported browsers now see a clear message recommending Microsoft Edge / Google Chrome / Firefox / Safari, plus a no-JavaScript fallback. Verified on Edge and Chrome.
+
+## 3.7.0
+- Demo/Live mode indicator: a DEMO/LIVE badge in the header, and the login screen now hides the “demo” note in Live mode (shows a LIVE indicator instead).
+
+## 3.6.1
+- Slightly enlarged the login screen header font.
+
+## 3.6.0
+- Certificate Authority management in the GUI (⚙ Settings → Certificate Authority): host + CA common name, computed config string, Test CA connection. Backend: `Test-Ca` + `POST /api/ca/ping`.
+- Windows / SSO sign-in is now toggleable in ⚙ Settings → Access & Permissions; when off, the login button is hidden.
+- Two-factor authentication (MFA) is opt-in (off by default), toggled in Settings → Access.
+- Sign-in domain list is settings-driven (⚙ Settings → General) instead of hardcoded.
+- Database setup in the GUI: test server connectivity on its port, pick an existing database, or create a new one. Backend: `POST /api/db/test`, `/db/list`, `/db/create`.
+- Connection tab: added Demo/Live and API base URL help text.
+
+## 3.5.0
+- System Team workspace, login screen, LDAP group→role access control, local default administrator, first-run setup wizard, Certificate Authority workspace, SQL connection settings, Demo↔Live switch.

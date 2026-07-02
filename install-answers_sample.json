@@ -1,0 +1,30 @@
+{
+  "_comment": "OPTIONAL. Copy this file to install-answers.json and fill in your values for a zero-prompt install. Delete (or leave blank) any value you'd rather be asked for interactively. Keys map 1:1 to Install-DSMT.ps1 parameters.",
+
+  "_required": "These four are the only things the installer truly needs:",
+  "SqlServer": "SQL01",
+  "LdapServer": "DC01.lab.local",
+  "BaseDN": "DC=lab,DC=local",
+  "LocalAdminPassword": "",
+
+  "_optional": "Everything below has a sensible default - set only what you need:",
+  "SqlAuth": "Windows",
+  "DbName": "DSMTOOL",
+  "Domains": ["lab.local"],
+  "AdConnectServer": "",
+  "CaConfigString": "",
+  "ApiPort": 8780,
+  "FrontendPort": 8080,
+  "InstallDir": "C:\\Program Files\\DSMT",
+  "ServiceAccount": "",
+  "ServiceAccountPassword": "",
+
+  "_switches": "Set any of these to true to skip that stage:",
+  "SkipPrereqs": false,
+  "SkipService": false,
+  "SkipFrontend": false,
+  "SkipDeploy": false,
+  "NoOpen": false,
+
+  "_security_note": "Putting a password in this file stores it in PLAIN TEXT. Leave LocalAdminPassword blank to be prompted securely instead, and delete this file after the install."
+}
