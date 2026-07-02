@@ -1,5 +1,7 @@
 # Changelog
 All notable changes to the Directory Services Management Tool.
+## 3.23.1
+- **Fixed `Install.ps1 -InitDb` failing with `The target principal name is incorrect. Cannot generate SSPI context` when using Windows auth.** The legacy step-by-step installer's `-InitDb` connection string never set `Encrypt`, so newer `System.Data.SqlClient` builds defaulted it to `True` - the same SSPI/TLS-identity error already fixed in `Install-DSMT.ps1` (see 3.21.3) but missed here. Now reads `Encrypt` from `config.json` (via `$cfg.Database.Encrypt`, default `False`) and adds `Connect Timeout=15`, matching the rest of the codebase.
 ## 3.23.0
 - **New page: Password Expiry Report.** Lists enabled AD users (not `PasswordNeverExpires`) whose password expires within a configurable window (30 days by default), with username, display name, OU, days remaining and expiry date.
   - **API:** new `GET /api/passwords/expiring?days=30` route.

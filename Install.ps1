@@ -61,11 +61,16 @@ if ($InitDb) {
     Write-Host '== Creating database schema ==' -ForegroundColor Cyan
     $schema = Get-Content (Join-Path $here 'sql/schema.sql') -Raw
     # Connect to master to allow CREATE DATABASE; uses the same auth as the API.
+    # Encrypt must come from config.json (not left to the driver's default) - newer
+    # System.Data.SqlClient builds default Encrypt to True, which trips
+    # "The target principal name is incorrect. Cannot generate SSPI context" against
+    # an on-prem SQL Server with Windows auth and no matching TLS certificate/SPN.
     $srv = "$($cfg.Database.Server),$($cfg.Database.Port)"
+    $encStr = if ($cfg.Database.Encrypt) { 'True' } else { 'False' }
     if ($cfg.Database.Auth -eq 'SQL') {
-        $cs = "Server=$srv;Database=master;User Id=$($cfg.Database.User);Password=$($cfg.Database.Password);TrustServerCertificate=True;"
+        $cs = "Server=$srv;Database=master;User Id=$($cfg.Database.User);Password=$($cfg.Database.Password);Encrypt=$encStr;TrustServerCertificate=True;Connect Timeout=15;"
     } else {
-        $cs = "Server=$srv;Database=master;Integrated Security=SSPI;TrustServerCertificate=True;"
+        $cs = "Server=$srv;Database=master;Integrated Security=SSPI;Encrypt=$encStr;TrustServerCertificate=True;Connect Timeout=15;"
     }
     $conn = New-Object System.Data.SqlClient.SqlConnection $cs
     $conn.Open()
