@@ -72,7 +72,12 @@ function Get-Session {
     $auth = $WebEvent.Request.Headers['Authorization']
     if (-not $auth -or $auth -notlike 'Bearer *') { return $null }
     $token = $auth.Substring(7)
-    $rows = Invoke-Sql 'SELECT TOP 1 Username,ConsoleRole,IsLocal,ExpiresAt FROM dbo.Sessions WHERE Token=@t' @{ t = $token }
+    try {
+        $rows = Invoke-Sql 'SELECT TOP 1 Username,ConsoleRole,IsLocal,ExpiresAt FROM dbo.Sessions WHERE Token=@t' @{ t = $token }
+    } catch {
+        Write-DbLog ("Get-Session: SQL unreachable, treating as unauthenticated - " + $_.Exception.Message)
+        return $null
+    }
     if (-not $rows -or $rows.Count -eq 0) { return $null }
     if ([datetime]$rows[0]['ExpiresAt'] -lt (Get-Date).ToUniversalTime()) { return $null }
     return [pscustomobject]@{ token=$token; username=$rows[0]['Username']; role=$rows[0]['ConsoleRole']; isLocal=[bool]$rows[0]['IsLocal'] }
@@ -554,6 +559,8 @@ Start-PodeServer {
         if ($d.port)    { $cfg.Database.Port     = [int]$d.port }
         if ($d.name)    { $cfg.Database.Name     = $d.name }
         if ($d.auth)    { $cfg.Database.Auth     = $d.auth }
+        if ($null -ne $d.user)     { $cfg.Database.User     = $d.user }
+        if ($null -ne $d.password) { $cfg.Database.Password = $d.password }
         if ($null -ne $d.encrypt) { $cfg.Database.Encrypt = [bool]$d.encrypt }
         try { Save-Config -Cfg $cfg; Write-PodeJsonResponse -Value @{ ok=$true } }
         catch { Set-PodeResponseStatus -Code 400; Write-PodeJsonResponse -Value @{ ok=$false; error=$_.Exception.Message } }

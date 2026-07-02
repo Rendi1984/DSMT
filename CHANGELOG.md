@@ -1,5 +1,8 @@
 # Changelog
 All notable changes to the Directory Services Management Tool.
+## 3.22.7
+- **API: fixed 500 on `/api/db/info` (and any authenticated route) when SQL-login auth is broken/untested.** `Get-Session` queried `dbo.Sessions` with no try/catch, so an unreachable or mis-authenticated SQL Server threw an unhandled `SqlException` before the route's own error handling ever ran, and Pode returned a raw 500 instead of a clean 401. `Get-Session` now catches SQL failures and treats the request as unauthenticated.
+- **API: `POST /api/db/config` now persists `User`/`Password`.** Previously only `host/port/name/auth/encrypt` were saved, so switching Database auth mode to SQL Login in Settings silently dropped the credentials, guaranteeing the broken-auth state above.
 ## 3.22.6
 - **API: added 8 missing routes** that the console's Live-mode calls but the backend didn't expose:
   - `POST /api/users/:sam/lock` — lock (disables the account) / unlock (re-enables + clears lockout) a user via AD.
