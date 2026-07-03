@@ -1,5 +1,17 @@
 # Changelog
 All notable changes to the Directory Services Management Tool.
+## 3.24.0
+**Full button audit — every action in the console now does something real.** Went over all 98 button handlers; fixed every one that was demo-only in Live mode or dead.
+- **Console, wired to existing API routes:** `userLock` (`POST /api/users/:sam/lock`), `revokeCert` (`POST /api/ca/revoke`), plus the CA page now actually loads issued/pending certificates from the API when opened in Live mode (previously it always showed sample data).
+- **New API routes + console wiring:**
+  - `POST /api/ca/approve` / `POST /api/ca/deny` — approve/deny pending certificate requests (`Approve-Request`/`Deny-Request` existed in `CertAuthority.psm1` but had no route or working button).
+  - `POST /api/ca/backup` — real CA database backup via new `Backup-CaDatabase` (`certutil -backupdb`).
+  - `GET/POST /api/access/mappings`, `DELETE /api/access/mappings/:id` — LDAP-group-to-role mappings persisted to `dbo.RoleMappings` (which `Invoke-SignIn` already reads for real role resolution).
+  - `GET/POST /api/access/local`, `POST /api/access/local/:id/toggle`, `DELETE /api/access/local/:id` — local break-glass accounts persisted to `dbo.LocalAccounts` with PBKDF2 hashing; built-in administrator cannot be deleted.
+  - `POST /api/access/require-group` — persists `RequireSecurityGroup`/`AccessSecurityGroup` to `dbo.Config` (enforced at sign-in).
+- **Console, real behavior replacing fakes:** "Export to Excel" on DL Groups now downloads an actual `.csv` file (was a toast with no file); "Restore configuration" now opens a real file picker and applies the JSON (was a demo toast); Windows/SSO sign-in in Live mode now explains it requires the IIS proxy instead of fake-signing-in; secret "Rotate" prompts for a new value and stores it DPAPI-encrypted; the Groups page loads real member lists in Live mode; **added the missing "Publish CRL" button** (the route and handler existed, the button didn't).
+- **Directory.psm1:** `Get-GroupMembers` now also returns `sam` (needed for member add/remove from the Groups page).
+- **Clarity fix:** the two Database test buttons are now labeled "Test server & list databases" (tests the form values) and "Test saved connection" (tests the saved config.json connection) — previously both said "Test … connection" and it was easy to think the second one tested the unsaved form.
 ## 3.23.2
 - **Wired up 3 more Live-mode actions that were still demo-only**, matching the fixes in 3.22.7: `runOffboard` (was a fake `setTimeout` animation; now calls `POST /api/users/offboard`, which already had a real `Invoke-Offboard` backend), `saveSecret` and `testSecret` (were always-succeed local-only stubs; now call `POST /api/secrets` and `POST /api/secrets/test`, both already backed by real DPAPI storage and an LDAP bind test in `Secrets.psm1`). Demo mode behavior is unchanged.
 - Audited the rest of the app (`bulkDisable`/`bulkReset` and every other subsystem: SQL, AD, Certificate Authority, Sync, Contractor, Diagnostics, Auth) and confirmed they already have real, working Live-mode wiring - no further gaps found.

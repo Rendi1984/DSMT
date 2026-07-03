@@ -141,7 +141,8 @@ HTTPS binding, or give Pode a cert (`Api.Protocol=https`, `Api.CertThumbprint`).
 | Password Expiry Report | `GET /api/passwords/expiring` |
 | Contractor Info | `GET /api/contractor/:user` |
 | Audit Log | `GET /api/audit` |
-| Certificate Authority | `GET /api/ca/{certs,pending}`, `POST /api/ca/{publish-crl,revoke}` |
+| Certificate Authority | `GET /api/ca/{certs,pending}`, `POST /api/ca/{publish-crl,revoke,approve,deny,backup}` |
+| Access Control | `GET/POST /api/access/mappings`, `GET/POST /api/access/local`, `POST /api/access/require-group`, `GET/POST /api/secrets` |
 
 ---
 

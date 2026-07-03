@@ -385,6 +385,24 @@ Start-PodeServer {
         Write-Audit -Actor $s.username -Action 'Revoke certificate' -Target $WebEvent.Data.serial -Result $(if($r.ok){'Success'}else{'Error'}) -Kind 'cert'
         Write-PodeJsonResponse -Value $r
     }
+    Add-PodeRoute -Method Post -Path '/api/ca/approve' -ScriptBlock {
+        $s = Get-Session $WebEvent; if (-not $s) { Write-401; return }
+        $r = Approve-Request -ConfigString $using:cs -RequestId ([int]$WebEvent.Data.id)
+        Write-Audit -Actor $s.username -Action 'Approve certificate request' -Target "$($WebEvent.Data.id)" -Result $(if($r.ok){'Success'}else{'Error'}) -Kind 'cert'
+        Write-PodeJsonResponse -Value $r
+    }
+    Add-PodeRoute -Method Post -Path '/api/ca/deny' -ScriptBlock {
+        $s = Get-Session $WebEvent; if (-not $s) { Write-401; return }
+        $r = Deny-Request -ConfigString $using:cs -RequestId ([int]$WebEvent.Data.id)
+        Write-Audit -Actor $s.username -Action 'Deny certificate request' -Target "$($WebEvent.Data.id)" -Result $(if($r.ok){'Success'}else{'Error'}) -Kind 'cert'
+        Write-PodeJsonResponse -Value $r
+    }
+    Add-PodeRoute -Method Post -Path '/api/ca/backup' -ScriptBlock {
+        $s = Get-Session $WebEvent; if (-not $s) { Write-401; return }
+        $r = Backup-CaDatabase -ConfigString $using:cs
+        Write-Audit -Actor $s.username -Action 'CA database backup' -Target $r.path -Result $(if($r.ok){'Success'}else{'Error'}) -Kind 'cert'
+        Write-PodeJsonResponse -Value $r
+    }
 
     # ---------- SECRETS (DPAPI-encrypted in SQL) ----------
     Add-PodeRoute -Method Get -Path '/api/secrets' -ScriptBlock {
@@ -402,6 +420,82 @@ Start-PodeServer {
         $cfg = $using:Config
         $ok = Test-ServiceAccount -Server $cfg.Directory.LdapServer -Account $WebEvent.Data.account -Password $WebEvent.Data.value -UseSsl:([bool]$cfg.Directory.UseSsl)
         Write-PodeJsonResponse -Value @{ ok = $ok }
+    }
+
+    # ---------- ACCESS CONTROL (role mappings, local accounts, sign-in policy) ----------
+    Add-PodeRoute -Method Get -Path '/api/access/mappings' -ScriptBlock {
+        if (-not (Get-Session $WebEvent)) { Write-401; return }
+        $rows = @(Get-RoleMappings | ForEach-Object { @{ id = [int]$_['Id']; group = [string]$_['LdapGroup']; role = [string]$_['ConsoleRole'] } })
+        Write-PodeJsonResponse -Value @{ mappings = $rows }
+    }
+    Add-PodeRoute -Method Post -Path '/api/access/mappings' -ScriptBlock {
+        $s = Get-Session $WebEvent; if (-not $s) { Write-401; return }
+        $g = [string]$WebEvent.Data.group; $r = [string]$WebEvent.Data.role
+        if ([string]::IsNullOrWhiteSpace($g) -or [string]::IsNullOrWhiteSpace($r)) {
+            Set-PodeResponseStatus -Code 400; Write-PodeJsonResponse -Value @{ ok=$false; error='group and role are required' }; return
+        }
+        Invoke-Sql @'
+MERGE dbo.RoleMappings AS t USING (SELECT @g AS LdapGroup) AS src ON t.LdapGroup=src.LdapGroup
+WHEN MATCHED THEN UPDATE SET ConsoleRole=@r
+WHEN NOT MATCHED THEN INSERT(LdapGroup,ConsoleRole) VALUES(@g,@r);
+'@ @{ g=$g; r=$r } -NonQuery | Out-Null
+        $id = Invoke-Sql 'SELECT Id FROM dbo.RoleMappings WHERE LdapGroup=@g' @{ g=$g } -Scalar
+        Write-Audit -Actor $s.username -Action 'Role mapping saved' -Target "$g -> $r" -Result 'Success' -Kind 'access'
+        Write-PodeJsonResponse -Value @{ ok=$true; id=[int]$id }
+    }
+    Add-PodeRoute -Method Delete -Path '/api/access/mappings/:id' -ScriptBlock {
+        $s = Get-Session $WebEvent; if (-not $s) { Write-401; return }
+        Invoke-Sql 'DELETE FROM dbo.RoleMappings WHERE Id=@i' @{ i=[int]$WebEvent.Parameters['id'] } -NonQuery | Out-Null
+        Write-Audit -Actor $s.username -Action 'Role mapping removed' -Target $WebEvent.Parameters['id'] -Result 'Success' -Kind 'access'
+        Write-PodeJsonResponse -Value @{ ok=$true }
+    }
+    Add-PodeRoute -Method Get -Path '/api/access/local' -ScriptBlock {
+        if (-not (Get-Session $WebEvent)) { Write-401; return }
+        $rows = @(Invoke-Sql 'SELECT Id,Username,ConsoleRole,Enabled,BuiltIn FROM dbo.LocalAccounts ORDER BY Id' | ForEach-Object {
+            @{ id = [int]$_['Id']; user = [string]$_['Username']; role = [string]$_['ConsoleRole']; enabled = [bool]$_['Enabled']; builtin = [bool]$_['BuiltIn'] }
+        })
+        Write-PodeJsonResponse -Value @{ accounts = $rows }
+    }
+    Add-PodeRoute -Method Post -Path '/api/access/local' -ScriptBlock {
+        $s = Get-Session $WebEvent; if (-not $s) { Write-401; return }
+        $u = [string]$WebEvent.Data.user; $role = [string]$WebEvent.Data.role; $pw = [string]$WebEvent.Data.password
+        if ([string]::IsNullOrWhiteSpace($u) -or [string]::IsNullOrWhiteSpace($pw)) {
+            Set-PodeResponseStatus -Code 400; Write-PodeJsonResponse -Value @{ ok=$false; error='user and password are required' }; return
+        }
+        if ([string]::IsNullOrWhiteSpace($role)) { $role = 'Operator' }
+        $h = New-PasswordHash -Password $pw
+        Invoke-Sql @'
+MERGE dbo.LocalAccounts AS t USING (SELECT @u AS Username) AS src ON t.Username=src.Username
+WHEN MATCHED THEN UPDATE SET ConsoleRole=@r, PwHash=@h, PwSalt=@sa, Iterations=@i, Enabled=1
+WHEN NOT MATCHED THEN INSERT(Username,ConsoleRole,PwHash,PwSalt,Iterations,Enabled,BuiltIn) VALUES(@u,@r,@h,@sa,@i,1,0);
+'@ @{ u=$u; r=$role; h=$h.Hash; sa=$h.Salt; i=$h.Iterations } -NonQuery | Out-Null
+        $id = Invoke-Sql 'SELECT Id FROM dbo.LocalAccounts WHERE Username=@u' @{ u=$u } -Scalar
+        Write-Audit -Actor $s.username -Action 'Local account saved' -Target $u -Result 'Success' -Kind 'access'
+        Write-PodeJsonResponse -Value @{ ok=$true; id=[int]$id }
+    }
+    Add-PodeRoute -Method Post -Path '/api/access/local/:id/toggle' -ScriptBlock {
+        $s = Get-Session $WebEvent; if (-not $s) { Write-401; return }
+        $en = [int][bool]$WebEvent.Data.enabled
+        Invoke-Sql 'UPDATE dbo.LocalAccounts SET Enabled=@e WHERE Id=@i' @{ e=$en; i=[int]$WebEvent.Parameters['id'] } -NonQuery | Out-Null
+        Write-Audit -Actor $s.username -Action $(if($en -eq 1){'Local account enabled'}else{'Local account disabled'}) -Target $WebEvent.Parameters['id'] -Result 'Success' -Kind 'access'
+        Write-PodeJsonResponse -Value @{ ok=$true }
+    }
+    Add-PodeRoute -Method Delete -Path '/api/access/local/:id' -ScriptBlock {
+        $s = Get-Session $WebEvent; if (-not $s) { Write-401; return }
+        $builtin = Invoke-Sql 'SELECT BuiltIn FROM dbo.LocalAccounts WHERE Id=@i' @{ i=[int]$WebEvent.Parameters['id'] } -Scalar
+        if ([bool]$builtin) { Set-PodeResponseStatus -Code 400; Write-PodeJsonResponse -Value @{ ok=$false; error='The built-in administrator cannot be removed.' }; return }
+        Invoke-Sql 'DELETE FROM dbo.LocalAccounts WHERE Id=@i' @{ i=[int]$WebEvent.Parameters['id'] } -NonQuery | Out-Null
+        Write-Audit -Actor $s.username -Action 'Local account removed' -Target $WebEvent.Parameters['id'] -Result 'Success' -Kind 'access'
+        Write-PodeJsonResponse -Value @{ ok=$true }
+    }
+    Add-PodeRoute -Method Post -Path '/api/access/require-group' -ScriptBlock {
+        $s = Get-Session $WebEvent; if (-not $s) { Write-401; return }
+        if ($null -ne $WebEvent.Data.enabled) {
+            Set-Config -Key 'RequireSecurityGroup' -Value $(if([bool]$WebEvent.Data.enabled){'true'}else{'false'}) -By $s.username
+        }
+        if ($WebEvent.Data.group) { Set-Config -Key 'AccessSecurityGroup' -Value ([string]$WebEvent.Data.group) -By $s.username }
+        Write-Audit -Actor $s.username -Action 'Sign-in policy updated' -Target 'access-control' -Result 'Success' -Kind 'access'
+        Write-PodeJsonResponse -Value @{ ok=$true }
     }
 
     # ---------- SETTINGS BACKUP / RESTORE ----------

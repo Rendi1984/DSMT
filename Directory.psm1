@@ -32,9 +32,10 @@ function Get-GroupMembers {
     param([Parameter(Mandatory)][string] $GroupName)
     Assert-ADModule
     Get-ADGroupMember -Identity $GroupName -Recursive |
-        Get-ADObject -Properties DisplayName, mail, title, userAccountControl, objectClass |
+        Get-ADObject -Properties DisplayName, mail, title, userAccountControl, objectClass, sAMAccountName |
         ForEach-Object {
             [pscustomobject]@{
+                sam     = $_.sAMAccountName
                 name    = $_.DisplayName
                 email   = $_.mail
                 title   = $_.title
