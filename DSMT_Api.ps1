@@ -562,6 +562,20 @@ WHEN NOT MATCHED THEN INSERT(Username,ConsoleRole,PwHash,PwSalt,Iterations,Enabl
         Write-PodeJsonResponse -Value $r
     }
 
+    # ---------- REMOTE EVENT VIEWER ----------
+    Add-PodeRoute -Method Get -Path '/api/events' -ScriptBlock {
+        if (-not (Get-Session $WebEvent)) { Write-401; return }
+        $server = $WebEvent.Query['server']
+        if ([string]::IsNullOrWhiteSpace($server)) { Set-PodeResponseStatus -Code 400; Write-PodeJsonResponse -Value @{ error = 'server is required' }; return }
+        $log   = if ($WebEvent.Query['log'])   { $WebEvent.Query['log'] }        else { 'System' }
+        $hours = if ($WebEvent.Query['hours']) { [int]$WebEvent.Query['hours'] } else { 24 }
+        $q     = $WebEvent.Query['q']
+        $lv    = @(1,2,3)
+        if ($WebEvent.Query['levels']) { $lv = @($WebEvent.Query['levels'] -split ',' | ForEach-Object { [int]$_ }) }
+        try { Write-PodeJsonResponse -Value @{ events = @(Get-RemoteEvents -Server $server -LogName $log -Hours $hours -Levels $lv -Query $q) } }
+        catch { Set-PodeResponseStatus -Code 400; Write-PodeJsonResponse -Value @{ error = $_.Exception.Message } }
+    }
+
     # ---------- USER LOCK / UNLOCK ----------
     Add-PodeRoute -Method Post -Path '/api/users/:sam/lock' -ScriptBlock {
         $s = Get-Session $WebEvent; if (-not $s) { Write-401; return }

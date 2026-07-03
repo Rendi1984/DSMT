@@ -1,5 +1,11 @@
 # Changelog
 All notable changes to the Directory Services Management Tool.
+## 3.29.0
+- **New page: Event Viewer** - reads a remote Windows server's event log over RPC (the same channel the graphical Event Viewer uses), so issues can be triaged without opening an RDP session. Pick a server, log (System/Application/Security/Setup), severity (Critical / +Error / +Warning), time window and an optional text/event-ID filter; results show time, level, source, event ID and message.
+  - **Diagnostics.psm1:** new `Get-RemoteEvents` via `Get-WinEvent -ComputerName` with a `FilterHashtable` (log, levels, start time) and server-side text/ID filtering. Requirements on the target: the "Remote Event Log Management" firewall rules, and Event Log Readers (or admin) rights for the API service account.
+  - **API:** new `GET /api/events?server=&log=&hours=&levels=&q=` route.
+  - Demo mode shows representative sample events; Live mode queries the real server.
+- Verified the Diagnostics page end-to-end: all three actions (DC health checks, Exchange checks, test message) were already wired to real API routes backed by genuine remote probes - no changes needed.
 ## 3.28.0
 **First deployment can now be done end-to-end through the browser wizard.**
 - **Installer: new `-SetupViaBrowser` bootstrap mode** (`Install-DSMT.ps1 -SetupViaBrowser`). Skips every SQL / directory / admin question: installs prerequisites, deploys files, registers the `DSMT-Api` service (starting in SETUP MODE) and the IIS console, then prints step-by-step instructions to finish in the web wizard. The classic fully-interactive `Install.cmd` flow is unchanged and remains fully supported.
