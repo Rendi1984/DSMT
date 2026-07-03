@@ -37,6 +37,27 @@ sensible defaults. Re-running is safe. Skip parts with `-SkipPrereqs`,
     -BaseDN "DC=lab,DC=local" -Domains "lab.local" -ServiceAccount "LAB\svc_dsmt$"
 ```
 
+### Browser-based first-run wizard (alternative)
+
+Initial deployment can also be completed **from the browser**, without filling in
+anything on the command line:
+
+1. Run the installer just far enough to get the service up — `Install.cmd`
+   (or `Install-DSMT.ps1 -SkipFrontend`, or copy the files and register the
+   service manually) with `config.json` left with a **blank** `Database.Server`
+   / `Database.Name`. The API then starts in **SETUP MODE**.
+2. Open the console, switch to **Live** mode (Settings → Connection, point it
+   at the API), sign out, and click **"Run the setup wizard"** on the sign-in
+   screen.
+3. The wizard walks through Database → Directory → Administrator → Install and
+   drives the real setup API (`/api/setup/test-server`, `create-db`, `save`):
+   it verifies the SQL server, creates the database + schema, writes
+   `config.json` (including the LDAP/Base DN block), and seeds the break-glass
+   local administrator. When it finishes, sign in with that account.
+
+Both paths are equivalent — `Install.cmd` / `Install-DSMT.ps1` remains fully
+supported for unattended or all-in-one installs.
+
 The numbered steps below document the **manual / granular** path (via `Install.ps1`),
 useful when you want to run a single stage at a time.
 
