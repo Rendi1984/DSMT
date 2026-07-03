@@ -93,23 +93,26 @@ function Invoke-Offboard {
 
 function Get-ExpiringPasswords {
     <# Users (enabled, not PasswordNeverExpires) whose password expires within $Days.
-       Uses the domain-wide default password policy's MaxPasswordAge; does not account
-       for fine-grained password policies (PSOs) that override it for specific users. #>
+       Uses the AD-computed msDS-UserPasswordExpiryTimeComputed attribute, which is
+       accurate per user - including fine-grained password policies (PSOs). #>
     param([int] $Days = 14)
     Assert-ADModule
-    $max = (Get-ADDefaultDomainPasswordPolicy).MaxPasswordAge.Days
-    if (-not $max -or $max -le 0) { return @() }
-    Get-ADUser -Filter 'Enabled -eq $true -and PasswordNeverExpires -eq $false' -Properties DisplayName, PasswordLastSet, DistinguishedName |
-        Where-Object { $_.PasswordLastSet } |
+    $now = Get-Date
+    Get-ADUser -Filter 'Enabled -eq $true -and PasswordNeverExpires -eq $false' -Properties DisplayName, DistinguishedName, 'msDS-UserPasswordExpiryTimeComputed' |
         ForEach-Object {
-            $left = $max - ((Get-Date) - $_.PasswordLastSet).Days
-            if ($left -le $Days -and $left -ge 0) {
-                [pscustomobject]@{
-                    sam        = $_.SamAccountName
-                    name       = $_.DisplayName
-                    ou         = (($_.DistinguishedName -split ',OU=',2)[1] -split ',')[0]
-                    daysLeft   = $left
-                    expiresOn  = (Get-Date).AddDays($left).ToString('yyyy-MM-dd')
+            $ft = $_.'msDS-UserPasswordExpiryTimeComputed'
+            # 0 / not set / 0x7FFFFFFFFFFFFFFF all mean "never expires" - skip.
+            if ($ft -and $ft -gt 0 -and $ft -lt 0x7FFFFFFFFFFFFFFF) {
+                $expires = [datetime]::FromFileTime($ft)
+                $left = [int][math]::Floor(($expires - $now).TotalDays)
+                if ($left -le $Days -and $left -ge 0) {
+                    [pscustomobject]@{
+                        sam        = $_.SamAccountName
+                        name       = $_.DisplayName
+                        ou         = (($_.DistinguishedName -split ',OU=',2)[1] -split ',')[0]
+                        daysLeft   = $left
+                        expiresOn  = $expires.ToString('yyyy-MM-dd')
+                    }
                 }
             }
         }
