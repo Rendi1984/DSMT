@@ -1,5 +1,8 @@
 # Changelog
 All notable changes to the Directory Services Management Tool.
+## 3.29.1
+- **Diagnostics: DC / Exchange checks no longer give a false "unreachable" when ICMP is blocked.** The probes treated a failed ping as "host down" and skipped the service checks entirely - common hardened networks block ping while RPC service queries work fine. Ping is now only a hint: the Service Control Manager query is attempted regardless, a host counts as reachable if any service answers, and a "no such service" reply is correctly distinguished from "host unreachable". If a host looks truly dead (no ping AND SCM cannot be opened), the remaining probes are skipped so RPC timeouts don't stack up.
+- Full end-to-end review of the diagnostics chain (module -> API routes -> console): field mapping between all three layers verified correct; requirements documented (targets need the "Remote Service Management" firewall rules and remote query rights for the API service account).
 ## 3.29.0
 - **New page: Event Viewer** - reads a remote Windows server's event log over RPC (the same channel the graphical Event Viewer uses), so issues can be triaged without opening an RDP session. Pick a server, log (System/Application/Security/Setup), severity (Critical / +Error / +Warning), time window and an optional text/event-ID filter; results show time, level, source, event ID and message.
   - **Diagnostics.psm1:** new `Get-RemoteEvents` via `Get-WinEvent -ComputerName` with a `FilterHashtable` (log, levels, start time) and server-side text/ID filtering. Requirements on the target: the "Remote Event Log Management" firewall rules, and Event Log Readers (or admin) rights for the API service account.
