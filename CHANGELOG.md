@@ -1,5 +1,9 @@
 # Changelog
 All notable changes to the Directory Services Management Tool.
+## 3.25.0
+- **Password Expiry Report is now PSO-accurate.** `Get-ExpiringPasswords` switched from the domain-default `MaxPasswordAge` calculation to the AD-computed `msDS-UserPasswordExpiryTimeComputed` attribute, which is correct per user - including fine-grained password policies (PSOs). Never-expiring values are skipped.
+- **Password Expiry Report: added an Export CSV button** that downloads the report (username, display name, OU, days left, expiry date) as a real .csv file.
+- **Settings > General now has editable "LDAP server" and "Base DN" fields.** Previously these could only be set through the install wizard, even though Save posted them to `/api/config`. The fields bind to the same values the wizard uses, so both stay in sync.
 ## 3.24.0
 **Full button audit — every action in the console now does something real.** Went over all 98 button handlers; fixed every one that was demo-only in Live mode or dead.
 - **Console, wired to existing API routes:** `userLock` (`POST /api/users/:sam/lock`), `revokeCert` (`POST /api/ca/revoke`), plus the CA page now actually loads issued/pending certificates from the API when opened in Live mode (previously it always showed sample data).
