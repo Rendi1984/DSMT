@@ -167,6 +167,7 @@ HTTPS binding, or give Pode a cert (`Api.Protocol=https`, `Api.CertThumbprint`).
 | DL Groups | `GET /api/dl/:group` |
 | User Management | `GET /api/users`, `POST /api/users/:sam/{reset,enable}` |
 | Password Expiry Report | `GET /api/passwords/expiring` |
+| Event Viewer | `GET /api/events` |
 | Contractor Info | `GET /api/contractor/:user` |
 | Audit Log | `GET /api/audit` |
 | Certificate Authority | `GET /api/ca/{certs,pending}`, `POST /api/ca/{publish-crl,revoke,approve,deny,backup}` |

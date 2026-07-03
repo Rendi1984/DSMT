@@ -128,5 +128,38 @@ function Send-TestMessage {
     }
 }
 
+function Get-RemoteEvents {
+    <# Reads a remote Windows server's event log via Get-WinEvent -ComputerName -
+       the same RPC channel the graphical Event Viewer uses, so no RDP session is
+       needed. Target requires the 'Remote Event Log Management' firewall rules
+       and the caller needs Event Log Readers (or admin) rights on it. #>
+    param(
+        [Parameter(Mandatory)][string] $Server,
+        [string] $LogName = 'System',
+        [int]    $Hours = 24,
+        [int[]]  $Levels = @(1,2,3),   # 1=Critical 2=Error 3=Warning
+        [string] $Query = '',
+        [int]    $Top = 200
+    )
+    $filter = @{ LogName = $LogName; StartTime = (Get-Date).AddHours(-1 * $Hours) }
+    if ($Levels -and $Levels.Count -gt 0) { $filter['Level'] = $Levels }
+    $events = @(Get-WinEvent -ComputerName $Server -FilterHashtable $filter -MaxEvents $Top -ErrorAction Stop)
+    $rows = $events | ForEach-Object {
+        $msg = [string]$_.Message
+        if ($msg.Length -gt 400) { $msg = $msg.Substring(0, 400) + '...' }
+        [pscustomobject]@{
+            time    = $_.TimeCreated.ToString('yyyy-MM-dd HH:mm:ss')
+            level   = $_.LevelDisplayName
+            source  = $_.ProviderName
+            eventId = $_.Id
+            message = $msg
+        }
+    }
+    if (-not [string]::IsNullOrWhiteSpace($Query)) {
+        $rows = $rows | Where-Object { $_.message -like "*$Query*" -or $_.source -like "*$Query*" -or "$($_.eventId)" -eq $Query }
+    }
+    return $rows
+}
+
 Export-ModuleMember -Function Get-DomainControllers, Test-DcServices,
-    Test-ExchangeServer, Send-TestMessage
+    Test-ExchangeServer, Send-TestMessage, Get-RemoteEvents
