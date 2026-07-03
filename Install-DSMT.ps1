@@ -75,7 +75,12 @@ param(
     [switch] $SkipPrereqs,
     [switch] $SkipService,
     [switch] $SkipFrontend,
-    [switch] $NoOpen
+    [switch] $NoOpen,
+
+    # Bootstrap-only install: skip every SQL / directory / admin question, leave
+    # config.json blank so the API starts in SETUP MODE, and finish the whole
+    # configuration in the browser setup wizard instead.
+    [switch] $SetupViaBrowser
 )
 
 $ErrorActionPreference = "Stop"
@@ -110,6 +115,15 @@ Write-Host "---------------------------------------------------------" -Foregrou
 # Gather required values (prompt only for what was not supplied)
 # ===========================================================================
 Step "Collect configuration"
+
+if ($SetupViaBrowser) {
+    Note "Browser-setup mode: SQL / directory / admin questions are skipped."
+    Note "You will complete them in the web setup wizard after the service starts."
+    $SqlServer = ""; $DbName = ""; $SqlUser = ""; $SqlPassword = ""
+    $LdapServer = ""; $BaseDN = ""
+}
+
+if (-not $SetupViaBrowser) {
 
 if ([string]::IsNullOrWhiteSpace($SqlServer))  { $SqlServer  = Ask "SQL Server host (e.g. SQL01 or SQL01\SQLEXPRESS)" "" }
 while ([string]::IsNullOrWhiteSpace($SqlServer)) { $SqlServer = Ask "SQL Server host is required" "" }
@@ -146,6 +160,8 @@ if (-not $Domains -or $Domains.Count -eq 0) {
     $d = Ask "Allowed sign-in domains (comma-separated, optional)" ""
     if (-not [string]::IsNullOrWhiteSpace($d)) { $Domains = @($d -split '\s*,\s*' | Where-Object { $_ }) }
 }
+
+}  # end of interactive questions (skipped with -SetupViaBrowser)
 
 $ApiPort      = [int](Ask "API port" $ApiPort)
 if (-not $SkipFrontend) { $FrontendPort = [int](Ask "Console (IIS) port" $FrontendPort) }
@@ -252,8 +268,30 @@ $cfg | ConvertTo-Json -Depth 6 | Set-Content -Path $cfgPath -Encoding UTF8
 Ok "Wrote $cfgPath"
 
 # ===========================================================================
-# 3) Create database + tables
+# Deployment metadata in the registry. Only metadata lives here - the actual
+# settings stay in config.json (bootstrap) and SQL (everything else), where
+# the API and console already read them.
 # ===========================================================================
+Step "Write registry metadata (HKLM:\SOFTWARE\DSMT)"
+try {
+    if (-not (Test-Path 'HKLM:\SOFTWARE\DSMT')) { New-Item -Path 'HKLM:\SOFTWARE\DSMT' -Force | Out-Null }
+    Set-ItemProperty -Path 'HKLM:\SOFTWARE\DSMT' -Name 'InstallDir'   -Value $InstallDir
+    Set-ItemProperty -Path 'HKLM:\SOFTWARE\DSMT' -Name 'Version'      -Value '3.28.0'
+    Set-ItemProperty -Path 'HKLM:\SOFTWARE\DSMT' -Name 'ApiPort'      -Value $ApiPort
+    Set-ItemProperty -Path 'HKLM:\SOFTWARE\DSMT' -Name 'FrontendPort' -Value $FrontendPort
+    Set-ItemProperty -Path 'HKLM:\SOFTWARE\DSMT' -Name 'ConfigPath'   -Value $cfgPath
+    Set-ItemProperty -Path 'HKLM:\SOFTWARE\DSMT' -Name 'SetupMode'    -Value $(if ($SetupViaBrowser) { 'browser-pending' } else { 'script' })
+    Ok "Registry metadata written."
+} catch { Note ("Could not write registry metadata: " + $_.Exception.Message) }
+
+# ===========================================================================
+# 3) Create database + tables   (skipped with -SetupViaBrowser: the web
+#    wizard creates the database, seeds the admin and writes config.json)
+# ===========================================================================
+if ($SetupViaBrowser) {
+    Step "Create database + local administrator"
+    Note "Skipped - the web setup wizard will do this. The API starts in SETUP MODE."
+} else {
 Step "Create database '$DbName' + tables"
 $schemaPath = Join-Path $here "sql\schema.sql"
 if (-not (Test-Path $schemaPath)) { throw "schema.sql not found at $schemaPath" }
@@ -339,6 +377,8 @@ WHEN NOT MATCHED THEN INSERT(Username,ConsoleRole,PwHash,PwSalt,Iterations,Enabl
   VALUES(@u,'Local Administrator',@h,@s,@i,1,1);
 '@ @{ u=$LocalAdminUser; h=$h.Hash; s=$h.Salt; i=$h.Iterations } -NonQuery | Out-Null
 Ok "Local administrator '$LocalAdminUser' set."
+
+}  # end of database + admin steps (skipped with -SetupViaBrowser)
 
 # ===========================================================================
 # 5) Register + start the API as a Windows service
@@ -483,7 +523,18 @@ Write-Host "==============================================" -ForegroundColor Gre
 Write-Host ""
 Write-Host ("API:      http://localhost:{0}/api/health" -f $ApiPort)
 if (-not $SkipFrontend) { Write-Host ("Console:  http://localhost:{0}/" -f $FrontendPort) }
-Write-Host ("Sign in:  {0} (local administrator)" -f $LocalAdminUser)
+if ($SetupViaBrowser) {
+    Write-Host ""
+    Write-Host "NEXT STEP - finish setup in the browser:" -ForegroundColor Yellow
+    Write-Host ("  1. Open http://localhost:{0}/ and switch the sign-in screen toggle to Live" -f $FrontendPort)
+    Write-Host ("     (API URL: http://localhost:{0})" -f $ApiPort)
+    Write-Host "  2. Click 'Run the setup wizard' and answer the SQL / directory questions there."
+    Write-Host "  3. Sign in with the administrator you created in the wizard (default admin / admin)"
+    Write-Host "     and follow the alerts to finish: change the default password and map an LDAP"
+    Write-Host "     security group to the System Administrator role."
+} else {
+    Write-Host ("Sign in:  {0} (local administrator)" -f $LocalAdminUser)
+}
 if (-not $SkipDeploy) { Write-Host ("Files:    {0}  (service runs from {0}\server)" -f $InstallDir) }
 Write-Host ""
 

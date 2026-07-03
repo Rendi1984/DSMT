@@ -198,7 +198,9 @@ WHEN NOT MATCHED THEN INSERT(Username,ConsoleRole,PwHash,PwSalt,Iterations,Enabl
         Invoke-Sql 'INSERT INTO dbo.Sessions(Token,Username,ConsoleRole,IsLocal,ExpiresAt) VALUES(@t,@u,@r,@l,DATEADD(hour,@h,SYSUTCDATETIME()))' `
             @{ t=$token; u=$r.Username; r=$r.Role; l=([int][bool]$r.IsLocal); h=$ttl } -NonQuery | Out-Null
         Write-Audit -Actor $r.Username -Action 'Console sign-in' -Target 'console' -Result 'Success' -Kind 'auth' -SourceIp $ip
-        Write-PodeJsonResponse -Value @{ token=$token; displayName=$r.Username; role=$r.Role; isLocal=$r.IsLocal }
+        # Flag well-known default credentials so the console can nag until they are changed.
+        $defPw = ([bool]$r.IsLocal -and ($b.password -eq 'admin' -or $b.password -eq $b.username))
+        Write-PodeJsonResponse -Value @{ token=$token; displayName=$r.Username; role=$r.Role; isLocal=$r.IsLocal; defaultPassword=$defPw }
     }
 
     Add-PodeRoute -Method Post -Path '/api/auth/logout' -ScriptBlock {
@@ -358,6 +360,13 @@ WHEN NOT MATCHED THEN INSERT(Username,ConsoleRole,PwHash,PwSalt,Iterations,Enabl
     Add-PodeRoute -Method Get -Path '/api/alerts' -ScriptBlock {
         if (-not (Get-Session $WebEvent)) { Write-401; return }
         $alerts = @()
+        # Setup task: the console has no LDAP group mapped to the admin role yet.
+        try {
+            $adminMaps = @(Get-RoleMappings | Where-Object { $_['ConsoleRole'] -eq 'System Administrator' })
+            if ($adminMaps.Count -eq 0) {
+                $alerts += @{ type='Setup'; title='Connect an LDAP admin group'; detail='Map a security group to the System Administrator role (Access Control)'; badge='action required' }
+            }
+        } catch {}
         try { foreach ($c in (Get-ExpiringCertificates -ConfigString $using:cs -Days 30)) { $alerts += @{ type='Certificate'; title=$c.subject; detail=$c.template; badge="exp $($c.expires)" } } } catch {}
         try { foreach ($p in (Get-ExpiringPasswords -Days 14)) { $alerts += @{ type='Password'; title=$p.sam; detail='AD password expiring'; badge="in $($p.daysLeft)d" } } } catch {}
         Write-PodeJsonResponse -Value @{ alerts=$alerts }

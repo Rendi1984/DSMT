@@ -39,21 +39,28 @@ sensible defaults. Re-running is safe. Skip parts with `-SkipPrereqs`,
 
 ### Browser-based first-run wizard (alternative)
 
-Initial deployment can also be completed **from the browser**, without filling in
+Initial deployment can also be completed **from the browser**, without answering
 anything on the command line:
 
-1. Run the installer just far enough to get the service up — `Install.cmd`
-   (or `Install-DSMT.ps1 -SkipFrontend`, or copy the files and register the
-   service manually) with `config.json` left with a **blank** `Database.Server`
-   / `Database.Name`. The API then starts in **SETUP MODE**.
-2. Open the console, switch to **Live** mode (Settings → Connection, point it
-   at the API), sign out, and click **"Run the setup wizard"** on the sign-in
-   screen.
-3. The wizard walks through Database → Directory → Administrator → Install and
-   drives the real setup API (`/api/setup/test-server`, `create-db`, `save`):
-   it verifies the SQL server, creates the database + schema, writes
-   `config.json` (including the LDAP/Base DN block), and seeds the break-glass
-   local administrator. When it finishes, sign in with that account.
+1. Bootstrap install — in an elevated PowerShell:
+   ```powershell
+   .\Install-DSMT.ps1 -SetupViaBrowser
+   ```
+   This skips every SQL / directory / admin question: it installs prerequisites,
+   deploys the files, registers the `DSMT-Api` service (which starts in
+   **SETUP MODE**) and the IIS console, and writes deployment metadata to
+   `HKLM:\SOFTWARE\DSMT`.
+2. Open the console, use the **Demo / Live toggle on the sign-in screen** to
+   switch to Live (API URL is pre-filled), and click **"Run the setup wizard"**.
+3. The wizard asks the same questions the script would — SQL server, database,
+   domain controller / LDAP host, Base DN, administrator account (defaults to
+   `admin` / `admin`) — and drives the real setup API: verifies the SQL server,
+   creates the database + schema, writes `config.json`, and seeds the
+   break-glass administrator.
+4. Sign in with that administrator. The alerts bell then shows the remaining
+   **setup tasks** until they are done: change the default password, and map an
+   LDAP security group to the **System Administrator** role (Access Control) so
+   domain admins can sign in with their own accounts.
 
 Both paths are equivalent — `Install.cmd` / `Install-DSMT.ps1` remains fully
 supported for unattended or all-in-one installs.
