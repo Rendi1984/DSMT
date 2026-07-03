@@ -158,6 +158,11 @@ if (Test-Path $InstallDir) {
     }
 } else { Note "Install folder '$InstallDir' not found (already removed)." }
 
+# Remove the deployment metadata written by the installer.
+try {
+    if (Test-Path 'HKLM:\SOFTWARE\DSMT') { Remove-Item 'HKLM:\SOFTWARE\DSMT' -Recurse -Force; Ok "Removed registry metadata (HKLM:\SOFTWARE\DSMT)." }
+} catch { Note ("Could not remove registry metadata: " + $_.Exception.Message) }
+
 Write-Host ""
 Write-Host "==============================================" -ForegroundColor Green
 Write-Host " DSMT uninstall complete." -ForegroundColor Green

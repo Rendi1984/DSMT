@@ -1,5 +1,11 @@
 # Changelog
 All notable changes to the Directory Services Management Tool.
+## 3.28.0
+**First deployment can now be done end-to-end through the browser wizard.**
+- **Installer: new `-SetupViaBrowser` bootstrap mode** (`Install-DSMT.ps1 -SetupViaBrowser`). Skips every SQL / directory / admin question: installs prerequisites, deploys files, registers the `DSMT-Api` service (starting in SETUP MODE) and the IIS console, then prints step-by-step instructions to finish in the web wizard. The classic fully-interactive `Install.cmd` flow is unchanged and remains fully supported.
+- **Registry metadata (`HKLM:\SOFTWARE\DSMT`).** The installer now records deployment metadata - InstallDir, Version, ApiPort, FrontendPort, ConfigPath, SetupMode. Settings themselves intentionally stay in `config.json` (bootstrap) and SQL (everything else), where the API and console already read them; the registry key is for discovery/inventory and is removed by the uninstaller.
+- **Wizard defaults to `admin` / `admin`** for the break-glass administrator (editable in the Administrator step, with an on-screen warning), so first sign-in after a browser-based install needs no prior password decision.
+- **Post-setup task alerts.** After signing in Live the console loads real alerts from `GET /api/alerts`, which now also reports setup tasks: **"Connect an LDAP admin group"** appears until a security group is mapped to the System Administrator role (Access Control), and **"Default administrator password in use"** appears (from a new `defaultPassword` flag on the login response) until the default credentials are changed. A toast on sign-in points to the alerts bell while setup tasks are pending. Demo-mode alerts are unchanged.
 ## 3.27.0
 - **One-click Demo/Live switching from the sign-in screen.** The sign-in card now has a Demo / Live toggle (with the API URL field when Live is selected), so switching modes no longer requires signing in to Demo first just to reach Settings > Connection. Demo mode itself is unchanged and remains fully functional for pre-deployment demos.
 - **The chosen mode and API URL now persist across refreshes** (localStorage). Previously every page reload silently dropped back to Demo with the default API address; now the console reopens in whatever mode it was left in. The Settings > Connection toggle persists the same way.
