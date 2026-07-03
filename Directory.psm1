@@ -32,9 +32,10 @@ function Get-GroupMembers {
     param([Parameter(Mandatory)][string] $GroupName)
     Assert-ADModule
     Get-ADGroupMember -Identity $GroupName -Recursive |
-        Get-ADObject -Properties DisplayName, mail, title, userAccountControl, objectClass |
+        Get-ADObject -Properties DisplayName, mail, title, userAccountControl, objectClass, sAMAccountName |
         ForEach-Object {
             [pscustomobject]@{
+                sam     = $_.sAMAccountName
                 name    = $_.DisplayName
                 email   = $_.mail
                 title   = $_.title
@@ -91,15 +92,26 @@ function Invoke-Offboard {
 }
 
 function Get-ExpiringPasswords {
+    <# Users (enabled, not PasswordNeverExpires) whose password expires within $Days.
+       Uses the domain-wide default password policy's MaxPasswordAge; does not account
+       for fine-grained password policies (PSOs) that override it for specific users. #>
     param([int] $Days = 14)
     Assert-ADModule
     $max = (Get-ADDefaultDomainPasswordPolicy).MaxPasswordAge.Days
     if (-not $max -or $max -le 0) { return @() }
-    Get-ADUser -Filter 'Enabled -eq $true -and PasswordNeverExpires -eq $false' -Properties PasswordLastSet |
+    Get-ADUser -Filter 'Enabled -eq $true -and PasswordNeverExpires -eq $false' -Properties DisplayName, PasswordLastSet, DistinguishedName |
         Where-Object { $_.PasswordLastSet } |
         ForEach-Object {
             $left = $max - ((Get-Date) - $_.PasswordLastSet).Days
-            if ($left -le $Days -and $left -ge 0) { [pscustomobject]@{ sam = $_.SamAccountName; daysLeft = $left } }
+            if ($left -le $Days -and $left -ge 0) {
+                [pscustomobject]@{
+                    sam        = $_.SamAccountName
+                    name       = $_.DisplayName
+                    ou         = (($_.DistinguishedName -split ',OU=',2)[1] -split ',')[0]
+                    daysLeft   = $left
+                    expiresOn  = (Get-Date).AddDays($left).ToString('yyyy-MM-dd')
+                }
+            }
         }
 }
 

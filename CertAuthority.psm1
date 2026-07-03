@@ -81,5 +81,17 @@ function Get-ExpiringCertificates {
         Where-Object { try { [datetime]$_.expires -le $cutoff } catch { $false } }
 }
 
+function Backup-CaDatabase {
+    <# Backs up the CA database via certutil -backupdb. The backup is written on
+       the machine running the API (certutil pulls from the remote CA). #>
+    param([Parameter(Mandatory)][string] $ConfigString, [string] $Path = '')
+    if ([string]::IsNullOrWhiteSpace($Path)) {
+        $Path = Join-Path $env:ProgramData ('DSMT\ca-backup\' + (Get-Date -Format 'yyyyMMdd_HHmmss'))
+    }
+    New-Item -ItemType Directory -Path $Path -Force | Out-Null
+    $out = certutil -config $ConfigString -backupdb $Path 2>&1
+    return [pscustomobject]@{ ok = ($LASTEXITCODE -eq 0); path = $Path; detail = ($out -join "`n") }
+}
+
 Export-ModuleMember -Function Get-IssuedCertificates, Get-PendingRequests,
-    Approve-Request, Deny-Request, Revoke-Certificate, Publish-Crl, Get-ExpiringCertificates, Test-Ca
+    Approve-Request, Deny-Request, Revoke-Certificate, Publish-Crl, Get-ExpiringCertificates, Test-Ca, Backup-CaDatabase

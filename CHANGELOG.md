@@ -1,5 +1,30 @@
 # Changelog
 All notable changes to the Directory Services Management Tool.
+## 3.24.0
+**Full button audit — every action in the console now does something real.** Went over all 98 button handlers; fixed every one that was demo-only in Live mode or dead.
+- **Console, wired to existing API routes:** `userLock` (`POST /api/users/:sam/lock`), `revokeCert` (`POST /api/ca/revoke`), plus the CA page now actually loads issued/pending certificates from the API when opened in Live mode (previously it always showed sample data).
+- **New API routes + console wiring:**
+  - `POST /api/ca/approve` / `POST /api/ca/deny` — approve/deny pending certificate requests (`Approve-Request`/`Deny-Request` existed in `CertAuthority.psm1` but had no route or working button).
+  - `POST /api/ca/backup` — real CA database backup via new `Backup-CaDatabase` (`certutil -backupdb`).
+  - `GET/POST /api/access/mappings`, `DELETE /api/access/mappings/:id` — LDAP-group-to-role mappings persisted to `dbo.RoleMappings` (which `Invoke-SignIn` already reads for real role resolution).
+  - `GET/POST /api/access/local`, `POST /api/access/local/:id/toggle`, `DELETE /api/access/local/:id` — local break-glass accounts persisted to `dbo.LocalAccounts` with PBKDF2 hashing; built-in administrator cannot be deleted.
+  - `POST /api/access/require-group` — persists `RequireSecurityGroup`/`AccessSecurityGroup` to `dbo.Config` (enforced at sign-in).
+- **Console, real behavior replacing fakes:** "Export to Excel" on DL Groups now downloads an actual `.csv` file (was a toast with no file); "Restore configuration" now opens a real file picker and applies the JSON (was a demo toast); Windows/SSO sign-in in Live mode now explains it requires the IIS proxy instead of fake-signing-in; secret "Rotate" prompts for a new value and stores it DPAPI-encrypted; the Groups page loads real member lists in Live mode; **added the missing "Publish CRL" button** (the route and handler existed, the button didn't).
+- **Directory.psm1:** `Get-GroupMembers` now also returns `sam` (needed for member add/remove from the Groups page).
+- **Clarity fix:** the two Database test buttons are now labeled "Test server & list databases" (tests the form values) and "Test saved connection" (tests the saved config.json connection) — previously both said "Test … connection" and it was easy to think the second one tested the unsaved form.
+## 3.23.2
+- **Wired up 3 more Live-mode actions that were still demo-only**, matching the fixes in 3.22.7: `runOffboard` (was a fake `setTimeout` animation; now calls `POST /api/users/offboard`, which already had a real `Invoke-Offboard` backend), `saveSecret` and `testSecret` (were always-succeed local-only stubs; now call `POST /api/secrets` and `POST /api/secrets/test`, both already backed by real DPAPI storage and an LDAP bind test in `Secrets.psm1`). Demo mode behavior is unchanged.
+- Audited the rest of the app (`bulkDisable`/`bulkReset` and every other subsystem: SQL, AD, Certificate Authority, Sync, Contractor, Diagnostics, Auth) and confirmed they already have real, working Live-mode wiring - no further gaps found.
+## 3.23.1
+- **Fixed `Install.ps1 -InitDb` failing with `The target principal name is incorrect. Cannot generate SSPI context` when using Windows auth.** The legacy step-by-step installer's `-InitDb` connection string never set `Encrypt`, so newer `System.Data.SqlClient` builds defaulted it to `True` - the same SSPI/TLS-identity error already fixed in `Install-DSMT.ps1` (see 3.21.3) but missed here. Now reads `Encrypt` from `config.json` (via `$cfg.Database.Encrypt`, default `False`) and adds `Connect Timeout=15`, matching the rest of the codebase.
+## 3.23.0
+- **New page: Password Expiry Report.** Lists enabled AD users (not `PasswordNeverExpires`) whose password expires within a configurable window (30 days by default), with username, display name, OU, days remaining and expiry date.
+  - **API:** new `GET /api/passwords/expiring?days=30` route.
+  - **Directory.psm1:** `Get-ExpiringPasswords` now also returns `name`/`ou`/`expiresOn` (previously only `sam`/`daysLeft`); the existing `/api/alerts` caller is unaffected since it only reads `sam`/`daysLeft`.
+  - Known limitation: expiry is computed from the domain-wide default password policy (`Get-ADDefaultDomainPasswordPolicy`) and does not account for fine-grained password policies (PSOs) that override it for specific users/groups.
+## 3.22.7
+- **API: fixed 500 on `/api/db/info` (and any authenticated route) when SQL-login auth is broken/untested.** `Get-Session` queried `dbo.Sessions` with no try/catch, so an unreachable or mis-authenticated SQL Server threw an unhandled `SqlException` before the route's own error handling ever ran, and Pode returned a raw 500 instead of a clean 401. `Get-Session` now catches SQL failures and treats the request as unauthenticated.
+- **API: `POST /api/db/config` now persists `User`/`Password`.** Previously only `host/port/name/auth/encrypt` were saved, so switching Database auth mode to SQL Login in Settings silently dropped the credentials, guaranteeing the broken-auth state above.
 ## 3.22.6
 - **API: added 8 missing routes** that the console's Live-mode calls but the backend didn't expose:
   - `POST /api/users/:sam/lock` — lock (disables the account) / unlock (re-enables + clears lockout) a user via AD.
