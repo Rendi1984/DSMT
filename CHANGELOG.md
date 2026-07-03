@@ -1,5 +1,8 @@
 # Changelog
 All notable changes to the Directory Services Management Tool.
+## 3.27.0
+- **One-click Demo/Live switching from the sign-in screen.** The sign-in card now has a Demo / Live toggle (with the API URL field when Live is selected), so switching modes no longer requires signing in to Demo first just to reach Settings > Connection. Demo mode itself is unchanged and remains fully functional for pre-deployment demos.
+- **The chosen mode and API URL now persist across refreshes** (localStorage). Previously every page reload silently dropped back to Demo with the default API address; now the console reopens in whatever mode it was left in. The Settings > Connection toggle persists the same way.
 ## 3.26.0
 - **The browser first-run wizard now performs a real installation.** In Live mode, the wizard's Install step drives the API's setup routes (`/api/setup/test-server` → `create-db` → `save`) instead of playing a scripted animation: it verifies the SQL server with the entered credentials, creates the database and applies the schema, persists the connection to `config.json`, and switches the API out of SETUP MODE. Errors from each stage are shown in the install log (new red error style). Demo mode keeps the simulated walkthrough.
 - **API: `/api/setup/save` now also persists the Directory settings** (`LdapServer`/`BaseDN`) collected by the wizard **and seeds the break-glass local administrator** (PBKDF2-hashed into `dbo.LocalAccounts`) — previously the wizard collected these values but the route ignored them, so a wizard-based install left no account to sign in with.
