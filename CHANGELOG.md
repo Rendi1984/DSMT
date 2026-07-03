@@ -1,5 +1,8 @@
 # Changelog
 All notable changes to the Directory Services Management Tool.
+## 3.23.2
+- **Wired up 3 more Live-mode actions that were still demo-only**, matching the fixes in 3.22.7: `runOffboard` (was a fake `setTimeout` animation; now calls `POST /api/users/offboard`, which already had a real `Invoke-Offboard` backend), `saveSecret` and `testSecret` (were always-succeed local-only stubs; now call `POST /api/secrets` and `POST /api/secrets/test`, both already backed by real DPAPI storage and an LDAP bind test in `Secrets.psm1`). Demo mode behavior is unchanged.
+- Audited the rest of the app (`bulkDisable`/`bulkReset` and every other subsystem: SQL, AD, Certificate Authority, Sync, Contractor, Diagnostics, Auth) and confirmed they already have real, working Live-mode wiring - no further gaps found.
 ## 3.23.1
 - **Fixed `Install.ps1 -InitDb` failing with `The target principal name is incorrect. Cannot generate SSPI context` when using Windows auth.** The legacy step-by-step installer's `-InitDb` connection string never set `Encrypt`, so newer `System.Data.SqlClient` builds defaulted it to `True` - the same SSPI/TLS-identity error already fixed in `Install-DSMT.ps1` (see 3.21.3) but missed here. Now reads `Encrypt` from `config.json` (via `$cfg.Database.Encrypt`, default `False`) and adds `Connect Timeout=15`, matching the rest of the codebase.
 ## 3.23.0
