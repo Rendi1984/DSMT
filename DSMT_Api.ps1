@@ -160,9 +160,27 @@ Start-PodeServer {
         $Config.Database.Password               = $d.Password
         $Config.Database.Encrypt                = [bool]$d.Encrypt
         $Config.Database.TrustServerCertificate = [bool]$d.TrustServerCertificate
+        # Optional: the browser wizard also sends the directory settings.
+        if ($d.Directory -and $Config.Directory) {
+            if ($d.Directory.LdapServer) { $Config.Directory.LdapServer = $d.Directory.LdapServer }
+            if ($d.Directory.BaseDN)     { $Config.Directory.BaseDN     = $d.Directory.BaseDN }
+        }
         Save-Config
-        try { Initialize-Db -DbConfig $Config.Database -ProbeOnly; Initialize-Db -DbConfig $Config.Database; Write-PodeJsonResponse -Value @{ ok = $true } }
-        catch { Write-PodeJsonResponse -Value @{ ok = $false; error = $_.Exception.Message } }
+        try { Initialize-Db -DbConfig $Config.Database -ProbeOnly; Initialize-Db -DbConfig $Config.Database }
+        catch { Write-PodeJsonResponse -Value @{ ok = $false; error = $_.Exception.Message }; return }
+        # Optional: seed the break-glass local administrator collected by the wizard.
+        if ($d.LocalAdmin -and $d.LocalAdmin.User -and $d.LocalAdmin.Password) {
+            try {
+                $h = New-PasswordHash -Password ([string]$d.LocalAdmin.Password)
+                Invoke-Sql @'
+MERGE dbo.LocalAccounts AS t USING (SELECT @u AS Username) AS s ON t.Username=s.Username
+WHEN MATCHED THEN UPDATE SET PwHash=@h, PwSalt=@sa, Iterations=@i, Enabled=1
+WHEN NOT MATCHED THEN INSERT(Username,ConsoleRole,PwHash,PwSalt,Iterations,Enabled,BuiltIn)
+  VALUES(@u,'Local Administrator',@h,@sa,@i,1,1);
+'@ @{ u=[string]$d.LocalAdmin.User; h=$h.Hash; sa=$h.Salt; i=$h.Iterations } -NonQuery | Out-Null
+            } catch { Write-PodeJsonResponse -Value @{ ok = $false; error = ('Database ready but seeding the local administrator failed: ' + $_.Exception.Message) }; return }
+        }
+        Write-PodeJsonResponse -Value @{ ok = $true }
     }
 
     # ---------- AUTH ----------

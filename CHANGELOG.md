@@ -1,5 +1,9 @@
 # Changelog
 All notable changes to the Directory Services Management Tool.
+## 3.26.0
+- **The browser first-run wizard now performs a real installation.** In Live mode, the wizard's Install step drives the API's setup routes (`/api/setup/test-server` → `create-db` → `save`) instead of playing a scripted animation: it verifies the SQL server with the entered credentials, creates the database and applies the schema, persists the connection to `config.json`, and switches the API out of SETUP MODE. Errors from each stage are shown in the install log (new red error style). Demo mode keeps the simulated walkthrough.
+- **API: `/api/setup/save` now also persists the Directory settings** (`LdapServer`/`BaseDN`) collected by the wizard **and seeds the break-glass local administrator** (PBKDF2-hashed into `dbo.LocalAccounts`) — previously the wizard collected these values but the route ignored them, so a wizard-based install left no account to sign in with.
+- `Install.cmd` / `Install-DSMT.ps1` remain fully supported as the unattended/all-in-one path; README documents both flows.
 ## 3.25.0
 - **Password Expiry Report is now PSO-accurate.** `Get-ExpiringPasswords` switched from the domain-default `MaxPasswordAge` calculation to the AD-computed `msDS-UserPasswordExpiryTimeComputed` attribute, which is correct per user - including fine-grained password policies (PSOs). Never-expiring values are skipped.
 - **Password Expiry Report: added an Export CSV button** that downloads the report (username, display name, OU, days left, expiry date) as a real .csv file.
