@@ -1,5 +1,10 @@
 # Changelog
 All notable changes to the Directory Services Management Tool.
+## 3.29.17
+**Root cause of "Install button does nothing" in the browser setup wizard, found from server request logs**: the re-entrancy guard in `setupPrimary` checked `this.state.installing`, but that flag is only set via an asynchronous `setState` inside `runSetupLive` - if the button fired more than once before that state update actually committed (rapid double-click, or any duplicate event), every invocation read the still-`false` value and proceeded, launching multiple **overlapping** `runSetupLive()` calls in parallel. Each overlapping call reset `installLog` and raced the others, so `/api/setup/test-server` and `/api/setup/create-db` fired dozens of times back-to-back (visible in `dsmt-request.log` as endless repeating pairs) while `/api/setup/save` was never cleanly reached - explaining both the "nothing happens" symptom and the runaway request log.
+- Fixed with a synchronous, non-state instance flag (`this._setupBusy`) set the instant the button is pressed - independent of any state-commit timing - and cleared on every exit path (success, each failure branch, cancel, and the Demo-mode completion timeout).
+- No server-side change needed - this was purely a client-side re-entrancy bug in `index.html`.
+
 ## 3.29.16
 - Added a friendly `GET /` response on the API (`DSMT_Api.ps1`) for anyone browsing straight to `http://<api-host>:8780/` out of curiosity or while troubleshooting - previously returned a raw `405 Method Not Allowed`, which reads like a real error even though it's expected (the API has no home page; it's only meant to be called via the console or `/api/...` paths). Also quiets the automatic `GET /favicon.ico` browsers send. No functional change to any real endpoint.
 

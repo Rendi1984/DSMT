@@ -7,16 +7,23 @@ useful context under "Notes" so a fresh session (with no chat history) can
 pick up immediately.
 
 ## Current version
-3.29.16 (API + Console) — see `CHANGELOG.md` for the authoritative log.
+3.29.17 (API + Console) — see `CHANGELOG.md` for the authoritative log.
 
 ## Open tasks
 - Waiting on user confirmation that a fresh `-SetupViaBrowser` install now
-  fully works end-to-end. Found and fixed 5 blocking bugs across 3.29.13-
-  3.29.15 (API crash-loop, duplicate CORS header on 401s, Start-Website
+  fully works end-to-end. Found and fixed 6 blocking bugs across 3.29.13-
+  3.29.17 (API crash-loop, duplicate CORS header on 401s, Start-Website
   COMException in the installer, "First run" local-admin button never
   actually authenticating in Live mode, unhandled exception in
-  `/api/auth/login` returning an empty 500) - not yet confirmed clean in the
-  user's lab.
+  `/api/auth/login` returning an empty 500, and a client-side re-entrancy
+  race in the setup wizard's Install button) - not yet confirmed clean in
+  the user's lab.
+- Diagnostic method worth remembering: when the user reports "button does
+  nothing," ask for BOTH `dsmt-service.log` (server-side process log) AND
+  `dsmt-request.log` (every HTTP request Pode received) - cross-referencing
+  the two is what revealed the setup-wizard race condition (request log
+  showed endless repeating request pairs with no `/api/setup/save` ever
+  reached, which static code reading alone hadn't caught).
 - User asked about moving basic settings (SQL server, DC, domain DN) into
   the Windows registry so they persist more reliably. Decided NOT to do this
   (see Notes) - the real bug was the fake-auth issue above, not the storage
@@ -66,6 +73,14 @@ pick up immediately.
   live-editable settings - keep it that way to avoid two stores drifting.
 
 ## Recently completed (most recent first)
+- 3.29.17: Fixed the setup wizard's Install button appearing to do nothing.
+  Root cause found by cross-referencing `dsmt-request.log` (endless repeating
+  `/api/setup/test-server`/`create-db` pairs, `/api/setup/save` never reached)
+  with the client code: the busy-guard checked an asynchronous state flag, so
+  more than one click before it committed launched overlapping, self-clobbering
+  install attempts. Replaced with a synchronous instance flag set instantly on
+  click and cleared on every exit path (success, each failure branch, cancel,
+  demo-mode completion).
 - 3.29.16: Added a friendly `GET /` (and `GET /favicon.ico`) response on the
   API - browsing straight to the API's own URL previously returned a raw
   405 Method Not Allowed, which read like a real error even though it's
