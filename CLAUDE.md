@@ -67,7 +67,7 @@ C:\inetpub\dsmt\index.html      ← console (IIS port 8080)
 
 ---
 
-## Current version: 3.29.1 (API + Console)
+## Current version: 3.29.12 (API + Console)
 Check `CHANGELOG.md` (top entry) for the authoritative current version before
 picking the next number.
 

@@ -1,5 +1,13 @@
 # Changelog
 All notable changes to the Directory Services Management Tool.
+## 3.29.12
+**Third and final fix, same incident as 3.29.7/3.29.8** - after the first two fixes, verification (JSON-parse of the bundled template + `node --check` on the extracted class body) still found three more corrupted regex/string literals in the Secrets Manager code, all the same class of bug: a JSON-encoding script used one backslash where two were required, so the shipped file decoded to a broken (unterminated or wrong-direction) regex instead of the intended one.
+- `exportDl`/`exportPwExp` CSV row separator: `.join('\r\n')` had landed as real CR+LF bytes instead of the literal text `\r\n`, which is not valid inside a JS string literal - fixed to decode correctly.
+- `rotateSecretLive`: `account.replace(/\\/g, '/')` (converts `DOMAIN\user` to `DOMAIN/user`) had decoded to the unterminated regex `/\/g` - fixed.
+- `saveSecretLive` and the secrets-list loader had the identical `account.replace(/\\/g, '/')` bug in two more places - fixed.
+- Verification method used going forward for any future `index.html` edit: extract the `__bundler/template` JSON string and confirm `JSON.parse` succeeds, then extract the `class Component extends DCLogic {...}` body and run `node --check` against it (wrapped with a stub `class DCLogic {}`). This is now the only verification method proven to catch this bug class - the previous headless-DOM-text-grep check does not, since raw unexecuted script text appears in a DOM dump regardless of success or failure.
+- No functional/UI changes in this release - purely a corruption fix so the console loads at all.
+
 ## 3.29.8
 **Second critical fix, same incident as 3.29.7** - the console got past the JSON-unpack error but then failed with `Invalid regular expression: missing /` during class evaluation.
 - **Root cause**: the CSV-export helper's regex `/[",\n]/` (used by `exportDl`/`exportPwExp` to decide whether a field needs quoting) had a **real newline character** baked into the regex literal itself, instead of the literal two-character escape sequence `\n`. This came from the original Python patch script that introduced the function, which used a single backslash where a doubled one was needed - so the character that landed in the file was an actual line break, not the text `\n`. A raw line break inside an unterminated JS regex literal is a syntax error, which crashed the whole class body evaluation (so nothing rendered at all, not just the CSV feature).
