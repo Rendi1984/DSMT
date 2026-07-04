@@ -7,12 +7,12 @@ useful context under "Notes" so a fresh session (with no chat history) can
 pick up immediately.
 
 ## Current version
-3.29.17 (API + Console) — see `CHANGELOG.md` for the authoritative log.
+3.29.18 (API + Console) — see `CHANGELOG.md` for the authoritative log.
 
 ## Open tasks
 - Waiting on user confirmation that a fresh `-SetupViaBrowser` install now
-  fully works end-to-end. Found and fixed 6 blocking bugs across 3.29.13-
-  3.29.17 (API crash-loop, duplicate CORS header on 401s, Start-Website
+  fully works end-to-end. Found and fixed 7 blocking bugs across 3.29.13-
+  3.29.18 (API crash-loop, duplicate CORS header on 401s, Start-Website
   COMException in the installer, "First run" local-admin button never
   actually authenticating in Live mode, unhandled exception in
   `/api/auth/login` returning an empty 500, and a client-side re-entrancy
@@ -64,7 +64,6 @@ pick up immediately.
 - Version bump policy: bump in all 5 places (sidebar footer, overview badge,
   About modal x2, `buildConfig()`) only when `index.html` itself changes.
 
-## Notes for next session
 - Registry vs config.json for settings: `config.json` is re-read fresh from
   disk on every relevant API call (`Get-DbInfo`, `Get-Config`, etc.), so it's
   already a reliable single source of truth once auth actually works. The
@@ -73,6 +72,13 @@ pick up immediately.
   live-editable settings - keep it that way to avoid two stores drifting.
 
 ## Recently completed (most recent first)
+- 3.29.18: Fixed sign-in HTTP 500 - `Invoke-Sql` (Db.psm1) bound every SQL
+  parameter as NVarChar(max); `DATEADD(hour, @h, ...)` in the session INSERT
+  rejects a string argument, so login authenticated and then crashed creating
+  the session row. Now binds bool/int/datetime with their real SQL types.
+  Also silenced two 404s logged on every console load: the design-time
+  image-slot helper no longer fetches its `.image-slots.state.json` sidecar
+  outside the design tool, and an inline SVG favicon was embedded.
 - 3.29.17: Fixed the setup wizard's Install button appearing to do nothing.
   Root cause found by cross-referencing `dsmt-request.log` (endless repeating
   `/api/setup/test-server`/`create-db` pairs, `/api/setup/save` never reached)
