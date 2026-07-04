@@ -1,5 +1,7 @@
 # Changelog
 All notable changes to the Directory Services Management Tool.
+## 3.29.5
+- **Removed two Google Fonts `<link rel="preconnect">` tags left over in `index.html`** (`fonts.googleapis.com`, `fonts.gstatic.com`). The actual font files were already bundled locally (the `@font-face` rules reference embedded resources, not the Google CDN), so these were dead leftovers from wherever the font CSS was originally copied from — but they still made the browser attempt an outbound HTTPS connection to Google on every page load, contradicting the documented "fully offline, no internet required" design. Audited the rest of the bundle: no other external `http(s)://` references found.
 ## 3.29.4
 **Access Control page: fixed a fake control and clarified the two-step access model.**
 - **Fixed: the "Local default administrator" enable/disable switch did nothing in Live mode.** It was driven by its own client-only `localAdminEnabled` flag, completely disconnected from the real local-accounts list right below it (which already had a correctly wired, working toggle for the same account). An admin could flip the top switch believing they'd disabled break-glass access when nothing happened server-side. The card now reads its status from — and its switch calls the same live toggle as — the actual built-in account row, and shows its real username instead of a hardcoded "administrator" (the browser wizard now defaults it to `admin`).
