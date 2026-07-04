@@ -1,5 +1,7 @@
 # Changelog
 All notable changes to the Directory Services Management Tool.
+## 3.29.3
+- **Fixed a filename mismatch that would break the Windows service registration.** `Install-DSMT.ps1` (3 places), `Install.ps1` and `README.md` referenced `DSMT.Api.ps1` (dot), but the file in the repo has always been `DSMT_Api.ps1` (underscore) — Step 5 (register + start the API service) would compile a service host pointing at a script that doesn't exist. Corrected every reference, including the script's own header comment.
 ## 3.29.2
 - **Fixed `SetupViaBrowser` not usable from `install-answers.json`.** `Start-Install.ps1` only passes parameters from a fixed switch list, and the new switch was missing from it - `"SetupViaBrowser": true` in the answers file would have been passed as a regular (broken) parameter. Added it to the list and documented the option in `install-answers_sample.json`.
 - Housekeeping: `TODO_FIXES.md` and `CLAUDE.md` were still describing version 3.22.x and long-completed pending fixes; both now reflect the current state (nothing pending, ideas backlog, updated environment facts including the registry metadata key).

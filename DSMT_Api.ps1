@@ -1,6 +1,6 @@
 <#
-  DSMT.Api.ps1 - REST API for the Directory Services Management Tool.
-  Built on Pode (https://badgerati.github.io/Pode/).  Run:  pwsh ./DSMT.Api.ps1
+  DSMT_Api.ps1 - REST API for the Directory Services Management Tool.
+  Built on Pode (https://badgerati.github.io/Pode/).  Run:  pwsh ./DSMT_Api.ps1
   (or via the Windows service installed by Install.ps1).
 
   Endpoints (all JSON):
