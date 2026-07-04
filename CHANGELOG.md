@@ -1,5 +1,8 @@
 # Changelog
 All notable changes to the Directory Services Management Tool.
+## 3.29.2
+- **Fixed `SetupViaBrowser` not usable from `install-answers.json`.** `Start-Install.ps1` only passes parameters from a fixed switch list, and the new switch was missing from it - `"SetupViaBrowser": true` in the answers file would have been passed as a regular (broken) parameter. Added it to the list and documented the option in `install-answers_sample.json`.
+- Housekeeping: `TODO_FIXES.md` and `CLAUDE.md` were still describing version 3.22.x and long-completed pending fixes; both now reflect the current state (nothing pending, ideas backlog, updated environment facts including the registry metadata key).
 ## 3.29.1
 - **Diagnostics: DC / Exchange checks no longer give a false "unreachable" when ICMP is blocked.** The probes treated a failed ping as "host down" and skipped the service checks entirely - common hardened networks block ping while RPC service queries work fine. Ping is now only a hint: the Service Control Manager query is attempted regardless, a host counts as reachable if any service answers, and a "no such service" reply is correctly distinguished from "host unreachable". If a host looks truly dead (no ping AND SCM cannot be opened), the remaining probes are skipped so RPC timeouts don't stack up.
 - Full end-to-end review of the diagnostics chain (module -> API routes -> console): field mapping between all three layers verified correct; requirements documented (targets need the "Remote Service Management" firewall rules and remote query rights for the API service account).

@@ -1,76 +1,54 @@
 # DSMT — Pending Fixes (open this when starting a new chat)
 
-**Current version:** Console `index.html` = 3.22.5 · API `DSMT_Api.ps1` = 3.22.6
+**Current version:** Console `index.html` = 3.29.1 · API `DSMT_Api.ps1` = 3.29.1
 
 ---
 
-## 🔴 Console fixes needed (index.html)
+## 🟢 Nothing pending
 
-These 5 functions are still stubs — they show a toast but do NOT call the API in Live mode.
+All previously listed fixes are DONE and merged to `main`. See `CHANGELOG.md`
+for the full history. Highlights of what was completed since 3.22.x:
 
-### 1. `saveConfig`
-Current (stub):
-```js
-saveConfig = () => this.showToast('Configuration saved', 'var(--green,#1a7f37)');
-```
-Fix: call `POST /api/config` with `{ directory: { ldapServer, baseDN }, domains, contractorOUs }`.
-
-### 2. `saveDb`
-Current (stub):
-```js
-saveDb = () => this.showToast('Data source saved', 'var(--green,#1a7f37)');
-```
-Fix: call `POST /api/db/config` with `{ host, port, name, auth, user, password, encrypt }`.
-
-### 3. `saveCa`
-Current (stub):
-```js
-saveCa = () => this.showToast('Certificate Authority settings saved', 'var(--green,#1a7f37)');
-```
-Fix: call `POST /api/ca/config` with `{ host: caHost, commonName: caCommonName }`.
-
-### 4. `exportDl`
-Current (bug — uses wrong variable):
-```js
-exportDl = () => {
-  ...
-  this.DL_DATA.length   // ← wrong! should be this.state.dlResults.length
-  ...
-};
-```
-Fix: replace `this.DL_DATA.length` with `(this.state.dlResults || []).length`.
-
-### 5. `createUser` / `addMember` / `removeMember` / `jobToggle` / `jobRun`
-These fire demo toasts in Live mode instead of calling the API.
-
-**createUser** — fix: call `POST /api/users` with `{ sam, name, ou }`, then reload users.
-
-**addMember** — fix: call `POST /api/groups/:name/members` with `{ sam }` (prompt for SAM first).
-
-**removeMember** — fix: call `DELETE /api/groups/:name/members/:sam`.
-
-**jobToggle** — fix: call `POST /api/jobs/:name/toggle` with `{ enabled: !current }`.
-
-**jobRun** — fix: call `POST /api/jobs/:name/run`.
+- **3.22.7** — all 5 console stub functions wired to the real API in Live mode
+  (`saveConfig`, `saveDb`, `saveCa`, `exportDl`, `createUser`/`addMember`/
+  `removeMember`/`jobToggle`/`jobRun`); fixed `/api/db/info` 500 with SQL-login
+  auth (`Get-Session` now catches SQL failures → clean 401) and `/api/db/config`
+  dropping `User`/`Password`.
+- **3.23.x** — new Password Expiry Report page + `GET /api/passwords/expiring`;
+  `Install.ps1 -InitDb` SSPI fix (Encrypt now from config.json); `runOffboard`,
+  `saveSecret`, `testSecret` wired to Live.
+- **3.24.0** — full audit of all 98 button handlers; everything now does
+  something real (CA approve/deny/backup routes added, Access Control persisted
+  to SQL, real CSV export, real config import, missing Publish CRL button
+  added, etc.).
+- **3.25.0** — PSO-accurate password expiry (`msDS-UserPasswordExpiryTimeComputed`),
+  report CSV export, editable LDAP server / Base DN in Settings.
+- **3.26.0** — browser first-run wizard performs a REAL install
+  (`/api/setup/test-server` → `create-db` → `save`, which now also persists the
+  Directory block and seeds the break-glass admin).
+- **3.27.0** — Demo/Live toggle on the sign-in screen; mode + API URL persist
+  across refreshes (localStorage).
+- **3.28.0** — `Install-DSMT.ps1 -SetupViaBrowser` bootstrap mode; registry
+  metadata under `HKLM:\SOFTWARE\DSMT`; wizard defaults to admin/admin with a
+  warning; post-setup task alerts ("Connect an LDAP admin group",
+  "Default administrator password in use").
+- **3.29.0** — new Event Viewer page (`GET /api/events`, remote event logs over
+  RPC — no RDP needed).
+- **3.29.1** — DC/Exchange diagnostics no longer report a false "unreachable"
+  when ICMP is blocked (ping is only a hint; SCM query runs regardless).
 
 ---
 
-## 🟡 Version to bump to: 3.22.7
-After all 5 fixes above, bump version in ALL 5 places inside index.html:
-- Sidebar label (`v3.22.5` → `v3.22.7`)
-- Overview badge
-- About modal
-- Installer-wizard label
-- `buildConfig()` version field
+## 🟡 Ideas / nice-to-have (not scheduled)
 
----
-
-## ✅ Already done (do NOT redo)
-- `Write-401` helper added to API (fixes CORS+401 race)
-- `DELETE` added to CORS allowed methods
-- All 31 bare 401 responses replaced with `Write-401`
-- Routes added: `/api/users/:sam/lock`, `/api/users` (POST), `/api/groups/:name/members` (POST+DELETE), `/api/jobs/:name/toggle`, `/api/jobs/:name/run`, `/api/config` (POST), `/api/ca/config` (POST), `/api/db/config` (POST)
-- Console: `userLock`, `userActionLive` (lock/unlock), `importConfig`, `exportDl` bug found
+- `Get-Session` in-memory token cache (short TTL) to cut the per-request SQL
+  round-trip. Not urgent at current load; mind cross-runspace invalidation on
+  logout if implemented.
+- CA `Get-IssuedCertificates` / `Get-PendingRequests` parse certutil CSV output;
+  consider hardening against subjects containing commas/quotes.
+- MFA verification is a client-side gate only (any 6-digit code passes);
+  server-side TOTP would make it real.
+- Event Viewer: consider a saved-servers dropdown and an export button.
 
 ---
 
@@ -81,4 +59,5 @@ After all 5 fixes above, bump version in ALL 5 places inside index.html:
 - API port: **8780**, Console port: **8080** (IIS)
 - Windows service name: `DSMT-Api`
 - Deploy paths: API → `C:\Program Files\DSMT\server\` · Console → `C:\inetpub\dsmt\index.html`
-- After replacing DSMT_Api.ps1: run `Restart-Service DSMT-Api`
+- Registry metadata: `HKLM:\SOFTWARE\DSMT` (InstallDir, Version, ports, SetupMode)
+- After replacing DSMT_Api.ps1 or modules: run `Restart-Service DSMT-Api`

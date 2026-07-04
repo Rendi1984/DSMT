@@ -26,5 +26,8 @@
   "SkipDeploy": false,
   "NoOpen": false,
 
+  "_browser_setup": "Set to true for a bootstrap-only install: skips every SQL/directory/admin question above (they can stay blank), starts the API in SETUP MODE, and you finish everything in the web setup wizard.",
+  "SetupViaBrowser": false,
+
   "_security_note": "Putting a password in this file stores it in PLAIN TEXT. Leave LocalAdminPassword blank to be prompted securely instead, and delete this file after the install."
 }
