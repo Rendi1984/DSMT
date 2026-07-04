@@ -7,12 +7,20 @@ useful context under "Notes" so a fresh session (with no chat history) can
 pick up immediately.
 
 ## Current version
-3.29.13 (API + Console) — see `CHANGELOG.md` for the authoritative log.
+3.29.14 (API + Console) — see `CHANGELOG.md` for the authoritative log.
 
 ## Open tasks
 - Waiting on user confirmation that a fresh `-SetupViaBrowser` install now
-  fully works end-to-end (v3.29.13 fixed the API crash-loop; not yet
-  confirmed in the user's lab).
+  fully works end-to-end. Found and fixed 3 blocking bugs across 3.29.13/
+  3.29.14 (API crash-loop, duplicate CORS header on 401s, Start-Website
+  COMException in the installer) - not yet confirmed clean in the user's lab.
+- User is testing with the browser AND SQL Server on the SAME machine as the
+  API/IIS (not a separate client) - remember this when reasoning about future
+  reports from them (e.g. "localhost" ambiguity doesn't apply the same way).
+- Remind the user (if it comes up again) that `index.html` must be opened via
+  the IIS URL, not as a `file://` path - the CORS "origin: 'null'" symptom in
+  one of their screenshots was because they had `C:\inetpub\dsmt\index.html`
+  open directly in the browser instead of `http://localhost:8080`.
 - The v3.29.7-3.29.12 console-loading incident (JSON/regex corruption in
   `index.html`) is fully resolved and merged.
 - Consider updating `.claude/skills/dsmt-dev-workflow/SKILL.md`'s verification
@@ -41,6 +49,10 @@ pick up immediately.
   About modal x2, `buildConfig()`) only when `index.html` itself changes.
 
 ## Recently completed (most recent first)
+- 3.29.14: Fixed duplicate CORS header on 401 responses (`Add-PodeHeader` ->
+  `Set-PodeHeader`, was producing invalid `*, *` and getting requests blocked
+  by the browser) and a Start-Website COMException in `Install-DSMT.ps1`'s
+  IIS deploy step (falls back to `appcmd start site`).
 - 3.29.13: Fixed the API crash-looping on every start (`$using:Config.Directory.BaseDN`
   chained member-access broke Pode's startup scope scanner on PS 5.1) - this
   is what caused "Failed to fetch" / connection-refused on every Live-mode

@@ -1,5 +1,11 @@
 # Changelog
 All notable changes to the Directory Services Management Tool.
+## 3.29.14
+**Two more real bugs found from lab testing after 3.29.13, both blocking install/first-use:**
+- **Duplicate CORS header on 401 responses**: the CORS middleware in `DSMT_Api.ps1` stamps `Access-Control-Allow-Origin: *` on every response using `Add-PodeHeader` (append), and `Write-401` stamped the same three headers again on top of it - producing `Access-Control-Allow-Origin: *, *`, which browsers treat as invalid and block outright ("Access-Control-Allow-Origin header contains multiple values"). Hit whenever an unauthenticated request reaches an authenticated route (e.g. testing `/api/db/test` before signing in). Fixed by switching all CORS header stamping from `Add-PodeHeader` to `Set-PodeHeader` (overwrite instead of append).
+- **`Install-DSMT.ps1` IIS deploy step could throw and leave the site stopped**: `Start-Website` (WebAdministration/COM) can throw `The object identifier does not represent a valid object` (HRESULT 0x800710D8) immediately after `Remove-WebBinding`/`New-WebBinding` in the same session - a known stale-handle quirk in the IIS PowerShell provider, especially likely after re-running the installer against an existing site. Fixed by falling back to `appcmd.exe start site` when `Start-Website` throws.
+- Reminder: the console must be opened via the IIS URL (`http://<server>:8080` or the reverse-proxy URL) - opening `index.html` directly as a `file://` path always fails CORS (`origin: 'null'`) regardless of server-side fixes, since the browser refuses to treat a local file as a valid CORS origin.
+
 ## 3.29.13
 **Fixes the API failing to start on every fresh install** (console shows "Failed to fetch" / `ERR_CONNECTION_REFUSED` on every Live-mode call, even though `Get-Service DSMT-Api` reports "Running").
 - **Root cause**: the `POST /api/users` (create user) route used `$using:Config.Directory.BaseDN` - a member-access chain directly on a `$using:` scoped variable. Pode's startup scope scanner (`Find-PodeScopedVariableUsingVariableValue`) cannot resolve this pattern on Windows PowerShell 5.1 and throws `Exception calling "ContainsKey"... Key cannot be null` while parsing **all** routes at server startup - before any request is even served. This crashes the whole Pode process immediately on every start.

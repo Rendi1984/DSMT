@@ -548,7 +548,18 @@ if (-not $SkipFrontend) {
     } else {
         New-Website -Name $SiteName -Port $FrontendPort -PhysicalPath $WebRoot | Out-Null
     }
-    Start-Website -Name $SiteName -ErrorAction SilentlyContinue
+    # Start-Website (WebAdministration/COM) can throw "The object identifier does
+    # not represent a valid object" (HRESULT 0x800710D8) right after Remove-WebBinding
+    # / New-WebBinding in the same session - a known stale-handle quirk in the IIS
+    # PowerShell provider. appcmd.exe talks to IIS config directly and does not
+    # share that cache, so fall back to it instead of leaving the site stopped.
+    try {
+        Start-Website -Name $SiteName -ErrorAction Stop
+    } catch {
+        Note "Start-Website via WebAdministration failed ($($_.Exception.Message)) - retrying via appcmd."
+        try { & "$env:windir\system32\inetsrv\appcmd.exe" start site "$SiteName" | Out-Null }
+        catch { Note "appcmd start site also failed: $($_.Exception.Message) - start the site manually in IIS Manager." }
+    }
 
     try { New-NetFirewallRule -DisplayName "DSMT Console $FrontendPort" -Direction Inbound -Action Allow -Protocol TCP -LocalPort $FrontendPort -ErrorAction SilentlyContinue | Out-Null } catch {}
     Ok "IIS site '$SiteName' is serving the console."
