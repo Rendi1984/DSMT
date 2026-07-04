@@ -100,9 +100,9 @@ Start-PodeServer {
     # runs for them) and answered 204 - some Pode builds skip global middleware
     # for an OPTIONS path that has no matching route, which drops the CORS header.
     Add-PodeMiddleware -Name 'CORS' -ScriptBlock {
-        Add-PodeHeader -Name 'Access-Control-Allow-Origin'  -Value '*'
-        Add-PodeHeader -Name 'Access-Control-Allow-Headers' -Value 'Content-Type, Authorization'
-        Add-PodeHeader -Name 'Access-Control-Allow-Methods' -Value 'GET, POST, DELETE, OPTIONS'
+        Set-PodeHeader -Name 'Access-Control-Allow-Origin'  -Value '*'
+        Set-PodeHeader -Name 'Access-Control-Allow-Headers' -Value 'Content-Type, Authorization'
+        Set-PodeHeader -Name 'Access-Control-Allow-Methods' -Value 'GET, POST, DELETE, OPTIONS'
         return $true
     }
     Add-PodeRoute -Method Options -Path '*' -ScriptBlock { Set-PodeResponseStatus -Code 204 }
@@ -110,10 +110,14 @@ Start-PodeServer {
     # Write-401 stamps CORS headers before setting 401 so browsers never see
     # a CORS failure masking an auth failure (the preflight succeeds, but
     # the real request returns 401 - without CORS headers that looks like CORS).
+    # MUST use Set-PodeHeader (overwrite), not Add-PodeHeader (append) - the CORS
+    # middleware above already stamped these on every response including this one,
+    # so Add-PodeHeader here produced "Access-Control-Allow-Origin: *, *", which
+    # browsers reject as an invalid header and block the request outright.
     function Write-401 {
-        Add-PodeHeader -Name 'Access-Control-Allow-Origin'  -Value '*'
-        Add-PodeHeader -Name 'Access-Control-Allow-Headers' -Value 'Content-Type, Authorization'
-        Add-PodeHeader -Name 'Access-Control-Allow-Methods' -Value 'GET, POST, DELETE, OPTIONS'
+        Set-PodeHeader -Name 'Access-Control-Allow-Origin'  -Value '*'
+        Set-PodeHeader -Name 'Access-Control-Allow-Headers' -Value 'Content-Type, Authorization'
+        Set-PodeHeader -Name 'Access-Control-Allow-Methods' -Value 'GET, POST, DELETE, OPTIONS'
         Set-PodeResponseStatus -Code 401
         Write-PodeJsonResponse -Value @{ error = 'Unauthorized' }
     }
