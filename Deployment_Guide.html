@@ -214,6 +214,7 @@
       <div class="toc-group-label">After install</div>
       <a href="#first-signin">First sign-in &amp; setup tasks</a>
       <a href="#demo-live">Demo vs. Live mode</a>
+      <a href="#reverse-proxy">IIS reverse proxy (optional)</a>
     </div>
 
     <div class="toc-group">
@@ -527,6 +528,29 @@ notepad config.json</pre><p>Set <strong>Database</strong>, <strong>Directory</st
       <h2>Demo vs. Live mode</h2>
       <p>The console always ships with <strong>Demo</strong> as a fully-working mode — realistic sample data, works completely offline, nothing is ever sent anywhere. It's meant to stay available for pre-deployment demos, training, or showing the product without touching a real environment.</p>
       <p><strong>Live</strong> mode routes every action through the real API against your real AD / SQL / CA. Switch between them any time from the <strong>Demo / Live toggle</strong> on the sign-in screen (API URL shown when Live is selected) — the choice and API URL persist across browser refreshes. A DEMO/LIVE badge in the top bar always shows which one is active.</p>
+    </section>
+
+    <section id="reverse-proxy">
+      <div class="eyebrow">Optional</div>
+      <h2>Single-origin via IIS reverse proxy</h2>
+      <p>By default the console (port 8080) calls the API on a different port (8780), which is a cross-origin call — it works because the API sends its own CORS headers. If you'd rather serve <strong>everything from one hostname</strong> — e.g. <code>https://dsmt.lab.local</code>, no port, no CORS at all — put IIS in front of the API as a reverse proxy. The console already supports this ("<em>Behind IIS reverse proxy — no port, no /api</em>" in Settings → Connection).</p>
+
+      <div class="callout crit">
+        <div class="dot"></div>
+        <p><strong>Do NOT add <code>Access-Control-Allow-*</code> headers in IIS</strong> The DSMT API already emits its own CORS headers. A second copy added via IIS <code>customHeaders</code> (or the HTTP Response Headers GUI) produces <code>Access-Control-Allow-Origin: *, *</code>, which browsers reject outright — this was a real bug (fixed in 3.29.14), don't reintroduce it. With a same-origin proxy, CORS headers aren't needed anyway.</p>
+      </div>
+
+      <h4>Prerequisites (install once, server-wide)</h4>
+      <ul>
+        <li><strong>URL Rewrite</strong> module and <strong>Application Request Routing (ARR)</strong> — both are offline <code>.msi</code> installers, stage them in advance for an air-gapped server.</li>
+        <li>IIS Manager → server node → <strong>Application Request Routing Cache</strong> → <strong>Server Proxy Settings</strong> → tick <strong>Enable proxy</strong> → Apply.</li>
+      </ul>
+
+      <ol class="steps">
+        <li><h4>Drop in the web.config</h4><p>Copy <code>iis-reverse-proxy.web.config</code> (in this package) to the console site as <code>C:\inetpub\dsmt\web.config</code>. Its one rewrite rule forwards <code>/api/*</code> to <code>http://localhost:8780/api/*</code> (edit the host/port if the API isn't on localhost:8780).</p></li>
+        <li><h4>Point the console at its own URL</h4><p>Settings → Connection → API base URL = the site's own URL with an <strong>empty path</strong> — e.g. <code>https://dsmt.lab.local</code> (no <code>:8780</code>, no <code>/api</code>). The console appends <code>/api/...</code> itself and the proxy forwards it.</p></li>
+        <li><h4>(Recommended) bind HTTPS</h4><p>Add an HTTPS binding with your certificate to the console site. Now the whole thing is one origin over TLS, and the API's <code>8780</code> port can be firewalled off from everything except localhost.</p></li>
+      </ol>
     </section>
 
     <hr class="rule">

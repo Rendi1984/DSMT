@@ -1,6 +1,7 @@
 # Changelog
 All notable changes to the Directory Services Management Tool.
 ## 3.29.19
+- **Added an optional IIS reverse-proxy config** (`iis-reverse-proxy.web.config`) + a Deployment Guide section, for serving the console and API from a single origin/hostname (no port, no CORS). The console already advertises this mode ("Behind IIS reverse proxy") in Settings -> Connection. NOTE: the config deliberately does NOT add `Access-Control-Allow-*` headers in IIS - the API emits its own, and a second copy reproduces the `*, *` duplicate-header bug fixed in 3.29.14. This is a docs/tooling addition only; no `index.html`/API code changed.
 - **Added a file:// misuse warning banner to the console** (`index.html`): opening `index.html` directly from disk (double-clicking it in Explorer) keeps recurring during lab testing, and it can never work in Live mode - the browser treats a local file as origin `null` and blocks its API calls outright, before they even leave the machine (which is also why nothing shows up in `dsmt-request.log` when this happens). The console now detects `file://` at load and shows a dismissible red banner: open the console through IIS at `http://localhost:8080` (or the server hostname) instead. No behavior change when served properly over HTTP.
 
 ## 3.29.18

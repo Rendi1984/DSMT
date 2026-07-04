@@ -43,6 +43,7 @@ Secrets.psm1        → server/modules/
 Diagnostics.psm1    → server/modules/
 schema.sql          → server/sql/
 config.sample.json  → server/
+iis-reverse-proxy.web.config → root/  ← optional; copy to IIS webroot as web.config for single-origin proxy
 install-answers_sample.json → root/
 CHANGELOG.md        → root/
 README.md           → root/
