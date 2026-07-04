@@ -192,7 +192,7 @@
       <div class="brand-mark">DS</div>
       <div class="brand-name">DSMT</div>
     </div>
-    <div class="brand-sub">Deployment &amp; Reference · v3.29.16</div>
+    <div class="brand-sub">Deployment &amp; Reference · v3.29.17</div>
 
     <div class="toc-group">
       <div class="toc-group-label">Start here</div>
@@ -675,6 +675,7 @@ notepad config.json</pre><p>Set <strong>Database</strong>, <strong>Directory</st
             <tr><td>Console fails to load at all: <code>Error unpacking</code> or <code>Invalid regular expression</code> in the browser console</td><td>A corrupted escape sequence in the bundled <code>index.html</code> template broke the embedded JS</td><td>Fixed in 3.29.7–3.29.12 — update to the latest <code>index.html</code></td></tr>
             <tr><td>Console never loads / shows a CORS error even though the API is healthy</td><td><code>index.html</code> was opened directly as a <code>file://</code> path instead of through IIS</td><td>Always browse to the IIS URL (e.g. <code>http://&lt;server&gt;:8080</code>), never open the HTML file directly — browsers refuse to treat a local file as a valid CORS origin</td></tr>
             <tr><td>Browsing directly to <code>http://&lt;api-host&gt;:8780/</code> shows <code>405 Method Not Allowed</code></td><td>Expected before 3.29.16 — the API has no home page, only <code>/api/...</code> routes</td><td>Fixed in 3.29.16 (now returns a small status JSON instead); to check the API is alive, use <code>/api/health</code>, and drive the console itself from port 8080, not 8780</td></tr>
+            <tr><td>Setup wizard's <strong>Install</strong> button appears to do nothing, and the server's <code>dsmt-request.log</code> shows endless repeating <code>/api/setup/test-server</code> / <code>/api/setup/create-db</code> pairs but <code>/api/setup/save</code> is never reached</td><td>A client-side re-entrancy race in <code>index.html</code> - the button's busy-guard read an asynchronous state flag, so more than one click before that flag committed launched overlapping, self-clobbering install attempts</td><td>Fixed in 3.29.17 - the guard is now a synchronous flag set the instant the button is pressed</td></tr>
           </tbody>
         </table>
       </div>
@@ -750,7 +751,7 @@ notepad config.json</pre><p>Set <strong>Database</strong>, <strong>Directory</st
 
     <div class="callout note" style="margin-top:60px;">
       <div class="dot"></div>
-      <p><strong>Version</strong> This guide describes DSMT 3.29.16. See <code>CHANGELOG.md</code> for the full release history.</p>
+      <p><strong>Version</strong> This guide describes DSMT 3.29.17. See <code>CHANGELOG.md</code> for the full release history.</p>
     </div>
   </main>
 </div>
