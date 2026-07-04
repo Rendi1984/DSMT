@@ -75,6 +75,13 @@ finishing:
   the user replaces them manually on the server.
 - After replacing `DSMT_Api.ps1` or any module → run `Restart-Service DSMT-Api`
 - After replacing `index.html` → refresh browser (Ctrl+F5)
+- **After any serious change** (a real bug fix or feature, not a typo/doc tweak):
+  in addition to the PR, build and send the user a deployment ZIP with every
+  file in the correct on-server folder layout (mirrors the table in
+  "File locations" above: root files loose, `server/`, `server/modules/`,
+  `server/sql/`). Stage into a scratch folder, `zip -r` it, and send it via
+  `SendUserFile` — don't just describe the changed files and expect the user
+  to reassemble the package themselves.
 
 ---
 
