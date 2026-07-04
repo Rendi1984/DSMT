@@ -50,7 +50,7 @@ if (Test-Path $AnswersFile) {
     Write-Host ("Using answers from {0}" -f $AnswersFile) -ForegroundColor Cyan
     $a = Get-Content $AnswersFile -Raw | ConvertFrom-Json
 
-    $switchNames = @("SkipPrereqs", "SkipService", "SkipFrontend", "SkipDeploy", "NoOpen")
+    $switchNames = @("SkipPrereqs", "SkipService", "SkipFrontend", "SkipDeploy", "NoOpen", "SetupViaBrowser")
     $secureNames = @("LocalAdminPassword", "ServiceAccountPassword")
 
     foreach ($prop in $a.PSObject.Properties) {

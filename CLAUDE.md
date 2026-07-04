@@ -57,17 +57,19 @@ C:\inetpub\dsmt\index.html      ← console (IIS port 8080)
 
 ---
 
-## Output files — how Claude delivers fixes
-- Claude CANNOT edit project files directly. Project files are READ-ONLY.
-- Every fixed file is delivered as a download from Claude's outputs.
-- User downloads and manually replaces the file on the server.
-- After replacing `DSMT_Api.ps1` → run `Restart-Service DSMT-Api`
+## How changes are delivered
+- In git-connected sessions (Claude Code / GitHub): develop on a feature branch,
+  commit, push, open a PR and merge to `main` — `main` is the source of truth.
+- In chat-only sessions (no repo access): deliver fixed files as downloads and
+  the user replaces them manually on the server.
+- After replacing `DSMT_Api.ps1` or any module → run `Restart-Service DSMT-Api`
 - After replacing `index.html` → refresh browser (Ctrl+F5)
 
 ---
 
-## Current version: 3.22.6 (API) / 3.22.5 (Console)
-Next release should be **3.22.7** (console fixes).
+## Current version: 3.29.1 (API + Console)
+Check `CHANGELOG.md` (top entry) for the authoritative current version before
+picking the next number.
 
 ### Versioning policy (MANDATORY)
 Format: `MAJOR.FEATURE.FIX`
