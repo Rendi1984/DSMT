@@ -147,8 +147,32 @@ function Invoke-Sql {
         $cmd = $conn.CreateCommand()
         $cmd.CommandText = $Query
         foreach ($k in $Params.Keys) {
-            $p = $cmd.Parameters.Add("@$k", [System.Data.SqlDbType]::NVarChar, -1)
-            $p.Value = if ($null -eq $Params[$k]) { [DBNull]::Value } else { [string]$Params[$k] }
+            # Bind with the real .NET type. Binding everything as NVarChar(max)
+            # breaks queries that pass a parameter to a typed T-SQL function
+            # argument - e.g. DATEADD(hour, @h, ...) throws "Argument data type
+            # nvarchar(max) is invalid for argument 2 of dateadd" - even though
+            # plain column INSERT/WHERE usage survives via implicit conversion.
+            $v = $Params[$k]
+            if ($null -eq $v) {
+                $p = $cmd.Parameters.Add("@$k", [System.Data.SqlDbType]::NVarChar, -1)
+                $p.Value = [DBNull]::Value
+            }
+            elseif ($v -is [bool]) {
+                $p = $cmd.Parameters.Add("@$k", [System.Data.SqlDbType]::Bit)
+                $p.Value = $v
+            }
+            elseif ($v -is [int] -or $v -is [long] -or $v -is [int16] -or $v -is [byte]) {
+                $p = $cmd.Parameters.Add("@$k", [System.Data.SqlDbType]::BigInt)
+                $p.Value = [long]$v
+            }
+            elseif ($v -is [datetime]) {
+                $p = $cmd.Parameters.Add("@$k", [System.Data.SqlDbType]::DateTime2)
+                $p.Value = $v
+            }
+            else {
+                $p = $cmd.Parameters.Add("@$k", [System.Data.SqlDbType]::NVarChar, -1)
+                $p.Value = [string]$v
+            }
         }
         if ($Scalar)   { return $cmd.ExecuteScalar() }
         if ($NonQuery) { return $cmd.ExecuteNonQuery() }
