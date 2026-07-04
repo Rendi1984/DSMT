@@ -1,0 +1,781 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>DSMT — Deployment &amp; Reference Guide</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root{
+    --paper:#f6f7f9; --panel:#ffffff; --ink:#12181f; --slate:#5b6472; --line:#dde2ea;
+    --accent:#2f63d1; --accent-deep:#1d47a8; --accent-soft:#eaf0fd;
+    --ok:#1a7f37; --ok-soft:#e8f5ec; --warn:#9a6700; --warn-soft:#fbf1de; --crit:#cf222e; --crit-soft:#fdecec;
+    --code-bg:#0f1720; --code-ink:#dbe4f0; --code-key:#7fb0ff; --code-str:#8bd5a0;
+    --radius:10px;
+    --mono: ui-monospace, "SF Mono", "Cascadia Mono", Consolas, "Liberation Mono", Menlo, monospace;
+    --sans: -apple-system, "Segoe UI", "Inter", system-ui, Roboto, Helvetica, Arial, sans-serif;
+  }
+  :root[data-theme="dark"]{
+    --paper:#0d1117; --panel:#141b24; --ink:#e6edf5; --slate:#93a0b4; --line:#26303c;
+    --accent:#5b8fef; --accent-deep:#89aef7; --accent-soft:#182742;
+    --ok:#3fb463; --ok-soft:#122a1b; --warn:#d9a441; --warn-soft:#2c2211; --crit:#f0616b; --crit-soft:#2e1417;
+    --code-bg:#0a0f16; --code-ink:#d7e2f2;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --paper:#0d1117; --panel:#141b24; --ink:#e6edf5; --slate:#93a0b4; --line:#26303c;
+      --accent:#5b8fef; --accent-deep:#89aef7; --accent-soft:#182742;
+      --ok:#3fb463; --ok-soft:#122a1b; --warn:#d9a441; --warn-soft:#2c2211; --crit:#f0616b; --crit-soft:#2e1417;
+      --code-bg:#0a0f16; --code-ink:#d7e2f2;
+    }
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--paper); color:var(--ink); font-family:var(--sans);
+    font-size:15.5px; line-height:1.6; -webkit-font-smoothing:antialiased;
+  }
+  a{color:var(--accent);}
+  h1,h2,h3,h4{text-wrap:balance; font-family:var(--sans); font-weight:750; letter-spacing:-0.01em; color:var(--ink);}
+  code, pre, kbd{font-family:var(--mono);}
+  code{background:var(--accent-soft); color:var(--accent-deep); padding:0.12em 0.42em; border-radius:5px; font-size:0.87em;}
+  :root[data-theme="dark"] code{ color:var(--accent-deep); }
+
+  /* ---------- shell ---------- */
+  .shell{display:flex; min-height:100vh; max-width:1440px; margin:0 auto;}
+  nav.toc{
+    width:280px; flex:none; position:sticky; top:0; align-self:flex-start;
+    height:100vh; overflow-y:auto; padding:26px 16px 40px 22px;
+    border-right:1px solid var(--line);
+  }
+  nav.toc::-webkit-scrollbar{width:8px;}
+  nav.toc::-webkit-scrollbar-thumb{background:var(--line); border-radius:8px;}
+  .brand{display:flex; align-items:center; gap:10px; margin-bottom:4px;}
+  .brand-mark{
+    width:30px; height:30px; border-radius:8px; flex:none;
+    background:linear-gradient(155deg, var(--accent), var(--accent-deep));
+    display:flex; align-items:center; justify-content:center; color:#fff; font-weight:800; font-size:13px;
+  }
+  .brand-name{font-weight:800; font-size:14.5px; letter-spacing:-0.01em;}
+  .brand-sub{font-size:11px; color:var(--slate); margin:2px 0 20px 40px; letter-spacing:0.02em;}
+  .toc-group{margin-bottom:4px;}
+  .toc-group-label{
+    font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em;
+    color:var(--slate); padding:14px 10px 6px;
+  }
+  nav.toc a{
+    display:block; padding:6.5px 10px; border-radius:7px; font-size:13.3px;
+    color:var(--ink); text-decoration:none; opacity:0.78; transition:none;
+  }
+  nav.toc a:hover{ background:var(--accent-soft); opacity:1; }
+  nav.toc a.active{ background:var(--accent-soft); color:var(--accent-deep); opacity:1; font-weight:650; }
+  nav.toc a.sub{ padding-left:22px; font-size:12.6px; }
+
+  main{flex:1; min-width:0; padding:40px clamp(20px,4vw,64px) 120px;}
+  .prose{max-width:760px;}
+  .wide{max-width:920px;}
+
+  section{scroll-margin-top:20px; margin-bottom:56px;}
+  section > .eyebrow{
+    font-size:11.5px; font-weight:700; text-transform:uppercase; letter-spacing:0.09em;
+    color:var(--accent); margin-bottom:8px;
+  }
+  h1{font-size:clamp(28px,4vw,38px); margin:0 0 10px;}
+  h2{font-size:24px; margin:0 0 14px; padding-top:4px;}
+  h3{font-size:17.5px; margin:28px 0 10px;}
+  h4{font-size:14.5px; margin:20px 0 6px; color:var(--slate); text-transform:uppercase; letter-spacing:0.04em; font-weight:700;}
+  p{margin:0 0 14px; color:var(--ink);}
+  .lede{font-size:17px; color:var(--slate); max-width:640px;}
+  ul,ol{margin:0 0 14px; padding-left:22px;}
+  li{margin-bottom:6px;}
+  hr.rule{border:none; border-top:1px solid var(--line); margin:40px 0;}
+
+  .callout{
+    border-radius:var(--radius); border:1px solid var(--line); background:var(--panel);
+    padding:16px 18px; margin:18px 0; display:flex; gap:12px; align-items:flex-start;
+  }
+  .callout .dot{width:9px; height:9px; border-radius:50%; margin-top:6px; flex:none;}
+  .callout.note .dot{background:var(--accent);}
+  .callout.warn{background:var(--warn-soft); border-color:color-mix(in srgb, var(--warn) 30%, var(--line));}
+  .callout.warn .dot{background:var(--warn);}
+  .callout.crit{background:var(--crit-soft); border-color:color-mix(in srgb, var(--crit) 30%, var(--line));}
+  .callout.crit .dot{background:var(--crit);}
+  .callout p{margin:0;}
+  .callout strong{display:block; margin-bottom:2px; font-size:13px;}
+
+  pre.code{
+    background:var(--code-bg); color:var(--code-ink); border-radius:var(--radius);
+    padding:15px 18px; overflow-x:auto; font-size:13px; line-height:1.65; margin:14px 0;
+    border:1px solid color-mix(in srgb, var(--code-bg) 60%, #ffffff 6%);
+  }
+  pre.code .c{color:#7d8aa0;}
+  .steps{counter-reset:step; list-style:none; padding-left:0; margin:18px 0;}
+  .steps > li{
+    counter-increment:step; position:relative; padding:2px 0 16px 40px; margin-bottom:2px;
+    border-left:1.5px solid var(--line); margin-left:15px;
+  }
+  .steps > li:last-child{border-left-color:transparent; padding-bottom:0;}
+  .steps > li::before{
+    content:counter(step); position:absolute; left:-15.5px; top:0;
+    width:30px; height:30px; border-radius:50%; background:var(--panel); border:1.5px solid var(--accent);
+    color:var(--accent-deep); font-weight:750; font-size:13px; display:flex; align-items:center; justify-content:center;
+  }
+  .steps h4{margin:0 0 4px; color:var(--ink); text-transform:none; letter-spacing:0; font-size:15px;}
+
+  table{width:100%; border-collapse:collapse; font-size:13.6px; margin:14px 0;}
+  .tbl-wrap{overflow-x:auto; border:1px solid var(--line); border-radius:var(--radius); margin:16px 0;}
+  .tbl-wrap table{margin:0;}
+  th{
+    text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:0.05em; color:var(--slate);
+    padding:10px 14px; border-bottom:1px solid var(--line); white-space:nowrap; background:var(--panel);
+  }
+  td{padding:10px 14px; border-bottom:1px solid var(--line); vertical-align:top; background:var(--panel);}
+  tr:last-child td{border-bottom:none;}
+  td code, th code{white-space:nowrap;}
+
+  .pill{
+    display:inline-flex; align-items:center; gap:5px; padding:2px 10px 2px 8px; border-radius:20px;
+    font-size:11px; font-weight:700; letter-spacing:0.02em;
+  }
+  .pill::before{content:""; width:6px; height:6px; border-radius:50%; background:currentColor;}
+  .pill.ok{color:var(--ok); background:var(--ok-soft);}
+  .pill.warn{color:var(--warn); background:var(--warn-soft);}
+  .pill.crit{color:var(--crit); background:var(--crit-soft);}
+  .pill.info{color:var(--accent-deep); background:var(--accent-soft);}
+
+  .feature{
+    border:1px solid var(--line); border-radius:12px; background:var(--panel);
+    padding:20px 22px; margin:16px 0;
+  }
+  .feature-head{display:flex; align-items:baseline; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:4px;}
+  .feature-head h3{margin:0;}
+  .feature-meta{display:flex; gap:8px; flex-wrap:wrap; margin:10px 0 4px;}
+  .feature-meta code{font-size:11.5px;}
+  .feature .path{font-size:12px; color:var(--slate); margin-bottom:10px;}
+
+  .grid2{display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:14px; margin:16px 0;}
+  .card{border:1px solid var(--line); border-radius:var(--radius); padding:16px 18px; background:var(--panel);}
+  .card h4{margin-top:0;}
+
+  .kbd{
+    display:inline-block; padding:1px 7px; border-radius:5px; border:1px solid var(--line);
+    background:var(--panel); font-size:12px; box-shadow:0 1px 0 var(--line);
+  }
+  .back-top{position:fixed; right:28px; bottom:28px; }
+  .back-top a{
+    display:flex; align-items:center; justify-content:center; width:42px; height:42px; border-radius:50%;
+    background:var(--panel); border:1px solid var(--line); color:var(--ink); text-decoration:none; font-size:16px;
+    box-shadow:0 4px 14px rgba(0,0,0,.08);
+  }
+  @media (max-width: 900px){
+    nav.toc{ position:fixed; left:-300px; top:0; z-index:50; background:var(--paper); transition:left .2s ease; box-shadow:0 0 0 9999px rgba(0,0,0,0); }
+    nav.toc.open{ left:0; box-shadow:8px 0 24px rgba(0,0,0,.25); }
+    .menu-btn{ display:flex !important; }
+    main{ padding-top:70px; }
+  }
+  .menu-btn{
+    display:none; position:fixed; top:14px; left:14px; z-index:60; width:40px; height:40px; border-radius:9px;
+    background:var(--panel); border:1px solid var(--line); align-items:center; justify-content:center; cursor:pointer;
+  }
+  @media (prefers-reduced-motion: reduce){ *{transition:none !important; scroll-behavior:auto !important;} }
+  html{scroll-behavior:smooth;}
+</style>
+</head>
+<body>
+
+<button class="menu-btn" id="menuBtn" aria-label="Toggle navigation">
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+</button>
+
+<div class="shell">
+  <nav class="toc" id="tocNav">
+    <div class="brand">
+      <div class="brand-mark">DS</div>
+      <div class="brand-name">DSMT</div>
+    </div>
+    <div class="brand-sub">Deployment &amp; Reference · v3.29.15</div>
+
+    <div class="toc-group">
+      <div class="toc-group-label">Start here</div>
+      <a href="#overview">Overview &amp; architecture</a>
+      <a href="#prereqs">Prerequisites</a>
+      <a href="#ports">Ports &amp; firewall</a>
+      <a href="#permissions">Permissions</a>
+    </div>
+
+    <div class="toc-group">
+      <div class="toc-group-label">Install</div>
+      <a href="#install-quick">A · Quick script</a>
+      <a href="#install-browser">B · Browser wizard</a>
+      <a href="#install-manual">C · Manual, stage by stage</a>
+      <a href="#config-ref">Configuration reference</a>
+    </div>
+
+    <div class="toc-group">
+      <div class="toc-group-label">After install</div>
+      <a href="#first-signin">First sign-in &amp; setup tasks</a>
+      <a href="#demo-live">Demo vs. Live mode</a>
+    </div>
+
+    <div class="toc-group">
+      <div class="toc-group-label">Feature reference</div>
+      <a href="#f-overview" class="sub">Overview</a>
+      <a href="#f-sync" class="sub">Azure Cloud Sync</a>
+      <a href="#f-dl" class="sub">DL Groups</a>
+      <a href="#f-users" class="sub">User Management</a>
+      <a href="#f-pwexp" class="sub">Password Expiry Report</a>
+      <a href="#f-groups" class="sub">Groups</a>
+      <a href="#f-jobs" class="sub">Scheduled Jobs</a>
+      <a href="#f-contractor" class="sub">Contractor Info</a>
+      <a href="#f-audit" class="sub">Audit Log</a>
+      <a href="#f-ca" class="sub">Certificate Authority</a>
+      <a href="#f-events" class="sub">Event Viewer</a>
+      <a href="#f-diag" class="sub">Diagnostics</a>
+      <a href="#f-access" class="sub">Access Control</a>
+      <a href="#f-data" class="sub">Data Source</a>
+      <a href="#f-settings" class="sub">Settings</a>
+    </div>
+
+    <div class="toc-group">
+      <div class="toc-group-label">Operate</div>
+      <a href="#troubleshooting">Troubleshooting</a>
+      <a href="#registry">Registry metadata</a>
+      <a href="#uninstall">Uninstall</a>
+      <a href="#layout">File &amp; folder layout</a>
+    </div>
+  </nav>
+
+  <main>
+    <section id="overview">
+      <div class="eyebrow">Directory Services Management Tool</div>
+      <h1>Deployment &amp; reference guide</h1>
+      <p class="lede">Everything needed to stand up DSMT on a domain-joined server and understand what every screen actually does once it's live.</p>
+
+      <div class="callout note">
+        <div class="dot"></div>
+        <p><strong>What DSMT is</strong> A browser console (<code>index.html</code>) that talks to an on-prem PowerShell REST API. The API is the only thing that touches Active Directory, SQL Server, your Certificate Authority and AD Connect — the console itself has no direct access to any of them.</p>
+      </div>
+
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>Layer</th><th>What it is</th><th>Talks to</th></tr></thead>
+          <tbody>
+            <tr><td>Console</td><td><code>index.html</code> — a single offline HTML file, served by IIS</td><td>The API only, over HTTPS + Bearer token</td></tr>
+            <tr><td>API</td><td><code>DSMT_Api.ps1</code> — PowerShell REST API (Pode), runs as the <code>DSMT-Api</code> Windows service</td><td>Active Directory (LDAP/RSAT), SQL Server, AD Certificate Services (<code>certutil</code>), AD Connect server (PSRemoting), SMTP</td></tr>
+            <tr><td>Database</td><td>SQL Server, database <code>DSMTOOL</code></td><td>Sessions, local accounts, role mappings, audit log, secrets, job history, config</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>The database does <em>not</em> hold your directory data — users, groups, certificates are always read live from AD / the CA. SQL is the console's own memory: who's logged in, who's allowed to do what, and what happened.</p>
+    </section>
+
+    <section id="prereqs">
+      <div class="eyebrow">Before you start</div>
+      <h2>Prerequisites</h2>
+      <div class="grid2">
+        <div class="card">
+          <h4>App server</h4>
+          <ul>
+            <li>Windows Server 2019/2022, <strong>domain-joined</strong></li>
+            <li>Windows PowerShell 5.1 (built in)</li>
+            <li>Administrator / elevated session for install</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h4>SQL Server</h4>
+          <ul>
+            <li>Any edition — SQL Express is enough for this workload</li>
+            <li>Windows or SQL-login auth, reachable from the app server</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h4>Console client</h4>
+          <ul>
+            <li>Any modern browser (Chrome, Edge, Firefox, Safari)</li>
+            <li>No install, no extensions — <code>index.html</code> is fully self-contained</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h4>Optional integrations</h4>
+          <ul>
+            <li>Azure AD Connect server — only if using the Sync page</li>
+            <li>AD Certificate Services — only if using the CA page</li>
+            <li>SMTP relay — only if sending real test messages from Diagnostics</li>
+          </ul>
+        </div>
+      </div>
+      <p>See <a href="#ports">Ports &amp; firewall</a> and <a href="#permissions">Permissions</a> below for exactly what each optional piece needs — skip any row for a feature you won't use.</p>
+    </section>
+
+    <section id="ports">
+      <div class="eyebrow">Network</div>
+      <h2>Ports &amp; firewall</h2>
+      <p>Two ports are yours to open for the app itself; everything else is what the app server needs to <em>reach outward</em> to do its job. Ports shown are defaults — all are configurable in <code>config.json</code> or the installer parameters.</p>
+
+      <h3>Inbound to the app server</h3>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>Port</th><th>Protocol</th><th>From</th><th>Purpose</th></tr></thead>
+          <tbody>
+            <tr><td><code>8080</code></td><td>TCP (HTTP, or HTTPS if bound in IIS)</td><td>Anyone who uses the console</td><td>Console (IIS site)</td></tr>
+            <tr><td><code>8780</code></td><td>TCP (HTTP, or HTTPS with <code>Api.Protocol=https</code>)</td><td>Whoever's browser runs the console</td><td>API (<code>DSMT-Api</code> service)</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Outbound from the app server</h3>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>Destination</th><th>Port</th><th>Protocol</th><th>Needed for</th></tr></thead>
+          <tbody>
+            <tr><td>SQL Server</td><td><code>1433</code> (or configured)</td><td>TCP</td><td>Everything — sessions, audit, config, roles</td></tr>
+            <tr><td>Domain controller</td><td><code>389</code> / <code>636</code> (LDAPS)</td><td>TCP/UDP</td><td>Sign-in, directory reads/writes, LDAP bind for service accounts</td></tr>
+            <tr><td>Domain controller</td><td><code>88</code></td><td>TCP/UDP</td><td>Kerberos (Windows auth to SQL, RPC calls)</td></tr>
+            <tr><td>Domain controller</td><td><code>53</code></td><td>TCP/UDP</td><td>DNS — domain discovery, SRV records</td></tr>
+            <tr><td>Any DC / member server you'll run <a href="#f-diag">Diagnostics</a> or <a href="#f-events">Event Viewer</a> against</td><td><code>135</code> + dynamic RPC range<sup>*</sup></td><td>TCP</td><td>Remote service &amp; event log queries (RPC endpoint mapper + a negotiated high port)</td></tr>
+            <tr><td>AD Connect server</td><td><code>5985</code> / <code>5986</code> (WinRM)</td><td>TCP</td><td>PSRemoting for the Sync page</td></tr>
+            <tr><td>Certificate Authority</td><td><code>135</code> + dynamic RPC range<sup>*</sup></td><td>TCP</td><td><code>certutil</code> RPC calls (issue/revoke/publish/backup)</td></tr>
+            <tr><td>SMTP relay</td><td><code>25</code> / <code>587</code> / <code>465</code> (configurable per test)</td><td>TCP</td><td>Diagnostics test message (skip if only ever using Simulate mode)</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p style="font-size:12.5px;color:var(--slate);">* Default dynamic RPC range is 49152–65535 on modern Windows. On the <em>target</em> machine, enable the built-in firewall rule groups <strong>“Remote Service Management”</strong> (Diagnostics) and <strong>“Remote Event Log Management”</strong> (Event Viewer) instead of opening the range by hand — they cover the endpoint mapper and the negotiated port together.</p>
+
+      <div class="callout warn">
+        <div class="dot"></div>
+        <p><strong>http.sys needs an explicit reservation for non-admin service accounts</strong> Binding <code>Api.Port</code> over plain HTTP uses <code>http.sys</code> under the hood — a service account that isn't fully elevated (NetworkService, a domain service account, a gMSA) needs a URL ACL reservation to bind it (<code>netsh http add urlacl url=http://+:8780/ user="&lt;account&gt;"</code>). Both installers do this automatically since 3.29.14 when registering the service — if you registered the service another way, or moved it to a different account afterward by hand, run that command yourself or the API will silently fail to bind while the Windows service still shows "Running".</p>
+      </div>
+
+      <div class="callout note">
+        <div class="dot"></div>
+        <p><strong>Minimal footprint</strong> Only enable what you'll actually use. A deployment that never touches Sync, CA, Diagnostics or Event Viewer needs nothing beyond SQL + LDAP/Kerberos/DNS to the DC.</p>
+      </div>
+    </section>
+
+    <section id="permissions">
+      <div class="eyebrow">Identity &amp; access</div>
+      <h2>Permissions</h2>
+      <p>Two different identities are involved and are easy to conflate: the <strong>account you run the installer as</strong> (needs elevated, one-time rights) and the <strong>account the <code>DSMT-Api</code> service runs as</strong> afterward (needs narrower, day-to-day rights). Least privilege applies to the second one.</p>
+
+      <h3>Installer-time (you, running <code>Install-DSMT.ps1</code>)</h3>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>Where</th><th>Rights needed</th><th>Why</th></tr></thead>
+          <tbody>
+            <tr><td>App server</td><td>Local Administrator</td><td>Install RSAT/Pode, register the Windows service, configure IIS</td></tr>
+            <tr><td>SQL Server instance</td><td><code>dbcreator</code> or <code>sysadmin</code></td><td>One-time <code>CREATE DATABASE</code> + schema — <em>not</em> needed by the service afterward</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Runtime (the <code>DSMT-Api</code> service account — gMSA, domain service account, or NetworkService)</h3>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>System</th><th>Rights needed</th><th>Only if you use</th></tr></thead>
+          <tbody>
+            <tr><td>SQL Server, <code>DSMTOOL</code> database</td><td><code>db_datareader</code> + <code>db_datawriter</code></td><td>Always required</td></tr>
+            <tr><td>Active Directory, target OU(s)</td><td>Read all; delegated Reset Password, Enable/Disable Account, Create User Objects, Remove from Group, Move Object</td><td>User Management, Groups, offboarding</td></tr>
+            <tr><td>AD Connect server</td><td>Local Administrator (or member of <em>Remote Management Users</em> with rights to the <code>ADSync</code> module)</td><td>Azure Cloud Sync</td></tr>
+            <tr><td>Certificate Authority</td><td><strong>Issue and Manage Certificates</strong> (AD CS Security tab)</td><td>Certificate Authority page</td></tr>
+            <tr><td>Diagnostics / Event Viewer targets</td><td>Member of local <strong>Event Log Readers</strong> (event log) and local Administrators or explicit SCM query rights (service status) on each target</td><td>Diagnostics, Event Viewer</td></tr>
+            <tr><td>SMTP relay</td><td>Send-as / relay permission for the From address used in test messages</td><td>Diagnostics test message (real send, not Simulate)</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="callout warn">
+        <div class="dot"></div>
+        <p><strong>Security log is stricter</strong> Reading the <code>Security</code> event log in Event Viewer typically needs rights beyond Event Log Readers (e.g. membership that grants <code>SeSecurityPrivilege</code>) — expect Access Denied there until that's granted explicitly.</p>
+      </div>
+
+      <h3>IIS application pool identity</h3>
+      <p>Serves a single static file — no AD, SQL, or special rights needed beyond read access to the console's folder.</p>
+    </section>
+
+    <section id="install-quick">
+      <div class="eyebrow">Install · Path A</div>
+      <h2>Quick script <span class="pill ok">recommended</span></h2>
+      <p>One script does everything end to end: prerequisites, <code>config.json</code>, database + schema, local break-glass admin, the API Windows service, and the IIS-hosted console.</p>
+      <pre class="code"><span class="c"># from an elevated PowerShell, in the server\ folder</span>
+cd C:\DSMT\server
+.\Install-DSMT.ps1</pre>
+      <p>Anything you don't pass on the command line is asked for interactively. Only four things are truly required — everything else has a sensible default:</p>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>Required</th><th>Example</th></tr></thead>
+          <tbody>
+            <tr><td><code>-SqlServer</code></td><td><code>SQL01</code> or <code>SQL01\SQLEXPRESS</code></td></tr>
+            <tr><td><code>-LdapServer</code></td><td><code>DC01.lab.local</code></td></tr>
+            <tr><td><code>-BaseDN</code></td><td><code>DC=lab,DC=local</code></td></tr>
+            <tr><td><code>-LocalAdminPassword</code></td><td>prompted securely if omitted</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Unattended example:</p>
+      <pre class="code">.\Install-DSMT.ps1 -SqlServer SQL01 -LdapServer DC01.lab.local `
+    -BaseDN "DC=lab,DC=local" -Domains "lab.local" -ServiceAccount "LAB\svc_dsmt$"</pre>
+      <p>Double-clicking <code>Install.cmd</code> at the project root does the same thing with a UAC prompt and a pause at the end — the easiest option if you're not comfortable with a terminal.</p>
+      <div class="callout note">
+        <div class="dot"></div>
+        <p><strong>Zero-prompt installs</strong> Copy <code>install-answers_sample.json</code> to <code>install-answers.json</code> next to <code>Install.cmd</code>, fill in your values, and run — any value you provide is passed through and the installer stops asking for it. Leave a value blank to be prompted for just that one.</p>
+      </div>
+      <p>Useful switches: <code>-SkipPrereqs</code>, <code>-SkipService</code>, <code>-SkipFrontend</code>, <code>-SkipDeploy</code>, <code>-NoOpen</code>. All steps are idempotent — re-running is safe.</p>
+
+      <div class="callout note">
+        <div class="dot"></div>
+        <p><strong>Fully offline / air-gapped app server</strong> Pass <code>-Offline</code> to skip every network call outright (no PSGallery, no Windows Update fallback) and fail immediately with the exact fix needed instead of hanging on a timeout. One-time prep on any internet-connected PC: <code>Save-Module -Name Pode -Path .\vendor</code>, then copy the resulting <code>vendor\Pode\</code> folder into <code>server\vendor\Pode\</code>. If the target's Windows Feature source was stripped from the image, also pass <code>-WindowsFeatureSource "D:\sources\sxs"</code> (a mounted Windows Server ISO/ESD, or an extracted <code>install.wim</code>). The console itself has zero external references — nothing to prepare there.</p>
+      </div>
+    </section>
+
+    <section id="install-browser">
+      <div class="eyebrow">Install · Path B</div>
+      <h2>Browser-based setup wizard</h2>
+      <p>Bootstrap the service without answering any SQL/directory/admin questions on the command line, then finish everything from the console itself.</p>
+
+      <ol class="steps">
+        <li>
+          <h4>Bootstrap the service</h4>
+          <pre class="code">.\Install-DSMT.ps1 -SetupViaBrowser</pre>
+          <p>Installs prerequisites, deploys the files, registers the <code>DSMT-Api</code> service (which starts in <strong>SETUP MODE</strong> — no database yet), deploys the IIS console, and writes metadata to <code>HKLM:\SOFTWARE\DSMT</code>.</p>
+        </li>
+        <li>
+          <h4>Open the console and switch to Live</h4>
+          <p>On the sign-in screen, use the <strong>Demo / Live</strong> toggle. Live shows an API URL field — point it at <code>http://&lt;app-server&gt;:8780</code>.</p>
+        </li>
+        <li>
+          <h4>Run the setup wizard</h4>
+          <p>Click <strong>“Run the setup wizard”</strong> below the sign-in form. It asks the same questions the script would — SQL server, database name, domain controller, Base DN, and an administrator account (defaults to <code>admin</code> / <code>admin</code>, editable).</p>
+        </li>
+        <li>
+          <h4>The wizard does the real work</h4>
+          <p>Test server → create database + schema → save configuration and seed the break-glass administrator, driven by the same <code>/api/setup/*</code> routes the script uses.</p>
+        </li>
+        <li>
+          <h4>Sign in and finish the setup tasks</h4>
+          <p>Sign in with the administrator you just created. The alerts bell will show what's left — see <a href="#first-signin">First sign-in</a> below.</p>
+        </li>
+      </ol>
+
+      <div class="callout note">
+        <div class="dot"></div>
+        <p>Both installation paths are fully supported and produce an identical result. Pick whichever fits how the server was handed to you — script for scripted/unattended rollouts, wizard when someone without PowerShell access needs to finish the configuration.</p>
+      </div>
+    </section>
+
+    <section id="install-manual">
+      <div class="eyebrow">Install · Path C</div>
+      <h2>Manual, stage by stage</h2>
+      <p>Useful when you want to run one stage at a time, or re-run just one step. All commands run from <code>server\</code> in an elevated PowerShell.</p>
+
+      <ol class="steps">
+        <li><h4>Prerequisites</h4><pre class="code">.\Install.ps1 -Prereqs</pre><p>Installs RSAT-AD-PowerShell and the Pode web framework (online from PSGallery, or offline from a bundled <code>vendor\Pode</code> folder).</p></li>
+        <li><h4>Configure</h4><pre class="code">copy config.sample.json config.json
+notepad config.json</pre><p>Set <strong>Database</strong>, <strong>Directory</strong> (LdapServer, BaseDN), <strong>Sync.ADConnectServer</strong>, and <strong>CertificateAuthority.ConfigString</strong> (<code>CA-HOST\CA-COMMON-NAME</code>). For production, set <code>Api.Protocol = https</code> and supply a certificate.</p></li>
+        <li><h4>Create the database</h4><pre class="code">.\Install.ps1 -InitDb</pre><p>Creates the <code>DSMTOOL</code> database, all tables, and seeds default config + role mappings.</p></li>
+        <li><h4>Create the local break-glass admin</h4><pre class="code">.\Install.ps1 -SeedLocalAdmin -LocalAdminUser administrator</pre><p>Prompts for a password, stored as a PBKDF2-salted hash in SQL — never in plain text. This account signs in independently of AD, for first run or when LDAP is unreachable.</p></li>
+        <li><h4>Register the API service</h4><pre class="code">.\Install.ps1 -RegisterService -ServiceAccount 'LAB\svc_dsmt$'
+<span class="c"># or, to run as NetworkService:</span>
+.\Install.ps1 -RegisterService</pre><p>Compiles and registers a native Windows service host (no NSSM dependency). Smoke test: <code>Invoke-RestMethod http://localhost:8780/api/health</code>.</p></li>
+        <li><h4>Point the console at the API</h4><p>Open <code>index.html</code>, sign in, go to <strong>Settings → Connection</strong>, switch Mode to <strong>Live</strong>, set the API base URL, <strong>Test connection</strong>, then sign out and back in.</p></li>
+      </ol>
+    </section>
+
+    <section id="config-ref">
+      <h2>Configuration reference — <code>config.json</code></h2>
+      <p>Only <strong>Api</strong> and <strong>Database</strong> are required to start the service — everything else can be configured later from the console (Settings) once the database is connected, and is stored in SQL from that point on.</p>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>Key</th><th>Meaning</th><th>Default</th></tr></thead>
+          <tbody>
+            <tr><td><code>Api.ListenAddress</code></td><td>Interface the API binds to</td><td><code>0.0.0.0</code></td></tr>
+            <tr><td><code>Api.Port</code></td><td>API port</td><td><code>8780</code></td></tr>
+            <tr><td><code>Api.Protocol</code></td><td><code>http</code> or <code>https</code></td><td><code>http</code></td></tr>
+            <tr><td><code>Api.CorsOrigins</code></td><td>Console URL(s) allowed to call the API</td><td><code>["*"]</code></td></tr>
+            <tr><td><code>Api.TokenTtlHours</code></td><td>Session token lifetime</td><td><code>8</code></td></tr>
+            <tr><td><code>Database.Server</code> / <code>Port</code> / <code>Name</code></td><td>SQL Server connection target</td><td>blank → SETUP MODE</td></tr>
+            <tr><td><code>Database.Auth</code></td><td><code>Windows</code> or <code>SQL</code></td><td><code>Windows</code></td></tr>
+            <tr><td><code>Database.Encrypt</code></td><td>TLS on the SQL connection</td><td><code>false</code> (on-prem SQL by name commonly trips SSPI/cert checks with it on)</td></tr>
+            <tr><td><code>Directory.LdapServer</code> / <code>BaseDN</code></td><td>Domain controller + search root</td><td>set by installer or Settings → General</td></tr>
+            <tr><td><code>Directory.Domains</code></td><td>Sign-in domains offered on the login screen</td><td><code>[]</code></td></tr>
+            <tr><td><code>Sync.ADConnectServer</code></td><td>Host running Azure AD Connect, for the Sync page</td><td>blank</td></tr>
+            <tr><td><code>CertificateAuthority.ConfigString</code></td><td><code>CA-HOST\CA-COMMON-NAME</code>, used for every <code>certutil</code> call</td><td>blank</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="first-signin">
+      <div class="eyebrow">Right after install</div>
+      <h2>First sign-in &amp; setup tasks</h2>
+      <p>Sign in with the local administrator you created (default <code>admin</code> / <code>admin</code> from the browser wizard). The alerts bell (top right) tracks what's left to configure — it won't clear itself, so treat it as your post-install checklist:</p>
+      <div class="grid2">
+        <div class="card">
+          <span class="pill crit">action required</span>
+          <h4>Default administrator password in use</h4>
+          <p>Shown whenever the local admin is still on <code>admin</code>/<code>admin</code>. Change it in <strong>Access Control → Local accounts</strong>.</p>
+        </div>
+        <div class="card">
+          <span class="pill crit">action required</span>
+          <h4>Connect an LDAP admin group</h4>
+          <p>Shown until a security group is mapped to the <strong>System Administrator</strong> role in <strong>Access Control → Role mappings</strong> — this is what lets your own domain admins sign in with their own accounts instead of the break-glass local one.</p>
+        </div>
+      </div>
+      <p>Both alerts clear automatically once resolved — no need to dismiss them by hand.</p>
+    </section>
+
+    <section id="demo-live">
+      <h2>Demo vs. Live mode</h2>
+      <p>The console always ships with <strong>Demo</strong> as a fully-working mode — realistic sample data, works completely offline, nothing is ever sent anywhere. It's meant to stay available for pre-deployment demos, training, or showing the product without touching a real environment.</p>
+      <p><strong>Live</strong> mode routes every action through the real API against your real AD / SQL / CA. Switch between them any time from the <strong>Demo / Live toggle</strong> on the sign-in screen (API URL shown when Live is selected) — the choice and API URL persist across browser refreshes. A DEMO/LIVE badge in the top bar always shows which one is active.</p>
+    </section>
+
+    <hr class="rule">
+
+    <section id="features">
+      <div class="eyebrow">Every screen, explained</div>
+      <h2 style="margin-bottom:22px;">Feature reference</h2>
+
+      <div class="feature" id="f-overview">
+        <div class="feature-head"><h3>Overview</h3><span class="pill ok">read-only</span></div>
+        <p>Landing dashboard: system health tiles (SQL, LDAP, AD Connect sync), recent audit activity, and quick links. No configuration — it reflects whatever the other pages report.</p>
+        <div class="feature-meta"><code>GET /api/health</code></div>
+      </div>
+
+      <div class="feature" id="f-sync">
+        <div class="feature-head"><h3>Azure Cloud Sync</h3><span class="pill warn">requires setup</span></div>
+        <p>Triggers and monitors Azure AD Connect delta sync cycles on a remote AD Connect server, over PSRemoting.</p>
+        <h4>To configure</h4>
+        <p>Set <code>Sync.ADConnectServer</code> (Settings → General or <code>config.json</code>). The API's run-as identity needs PSRemoting rights and local admin on that box.</p>
+        <div class="feature-meta"><code>POST /api/sync</code><code>GET /api/sync/status</code></div>
+      </div>
+
+      <div class="feature" id="f-dl">
+        <div class="feature-head"><h3>DL Groups</h3></div>
+        <p>Looks up a distribution/security group by name and lists its members (name, email, title, type, enabled state). Export downloads the result as a real <code>.csv</code>.</p>
+        <div class="feature-meta"><code>GET /api/dl/:group</code></div>
+      </div>
+
+      <div class="feature" id="f-users">
+        <div class="feature-head"><h3>User Management</h3></div>
+        <p>Search AD users, create/reset/enable/disable/lock accounts, bulk actions on a selection, and a guided offboarding flow (disable → reset password → remove from all groups → hide from address book → move to a Disabled OU → audit entry).</p>
+        <h4>To configure</h4>
+        <p>The run-as identity needs delegated reset-password / enable-disable / create-user rights on the target OU(s). Offboarding's target OU comes from <code>ContractorExpectedSupportOU</code> in Settings.</p>
+        <div class="feature-meta"><code>GET /api/users</code><code>POST /api/users</code><code>POST /api/users/:sam/{reset,enable,lock}</code><code>POST /api/users/bulk</code><code>POST /api/users/offboard</code></div>
+      </div>
+
+      <div class="feature" id="f-pwexp">
+        <div class="feature-head"><h3>Password Expiry Report</h3></div>
+        <p>Lists enabled users (excluding <code>PasswordNeverExpires</code>) whose password expires within a configurable window (30 days by default) — username, display name, OU, days left, expiry date. Computed per-user via <code>msDS-UserPasswordExpiryTimeComputed</code>, so fine-grained password policies (PSOs) are respected. Export downloads a <code>.csv</code>.</p>
+        <div class="feature-meta"><code>GET /api/passwords/expiring?days=30</code></div>
+      </div>
+
+      <div class="feature" id="f-groups">
+        <div class="feature-head"><h3>Groups</h3></div>
+        <p>Browse a security/distribution group's membership, add a member by SAM account name, or remove one.</p>
+        <div class="feature-meta"><code>GET /api/dl/:group</code><code>POST /api/groups/:name/members</code><code>DELETE /api/groups/:name/members/:sam</code></div>
+      </div>
+
+      <div class="feature" id="f-jobs">
+        <div class="feature-head"><h3>Scheduled Jobs</h3><span class="pill warn">requires setup</span></div>
+        <p>Enable/disable and manually run named jobs (e.g. “AD Connect Delta Sync”, “Disabled-User Cleanup”).</p>
+        <h4>To configure</h4>
+        <p>Each row corresponds to a <strong>Windows Scheduled Task with the same name</strong> on the app server — create those tasks first, then manage them here.</p>
+        <div class="feature-meta"><code>POST /api/jobs/:name/toggle</code><code>POST /api/jobs/:name/run</code></div>
+      </div>
+
+      <div class="feature" id="f-contractor">
+        <div class="feature-head"><h3>Contractor Info</h3></div>
+        <p>Looks up a contractor account and verifies it sits in the expected OU (admin vs. support), reading <code>extensionAttribute10–15</code> for related server/system references.</p>
+        <h4>To configure</h4>
+        <p><code>ContractorExpectedAdminOU</code> / <code>ContractorExpectedSupportOU</code> in Settings → General.</p>
+        <div class="feature-meta"><code>GET /api/contractor/:user</code></div>
+      </div>
+
+      <div class="feature" id="f-audit">
+        <div class="feature-head"><h3>Audit Log</h3><span class="pill ok">read-only</span></div>
+        <p>Every administrative action taken through the console — actor, action, target, result, source IP, timestamp — filterable by kind (user, password, access, cert, secret, db…). This is what makes Live mode safe to hand to an operations team.</p>
+        <div class="feature-meta"><code>GET /api/audit?kind=</code></div>
+      </div>
+
+      <div class="feature" id="f-ca">
+        <div class="feature-head"><h3>Certificate Authority</h3></div>
+        <p>Issued and pending certificate requests, approve/deny a request, revoke a certificate, publish the CRL, and back up the CA database. All actions run <code>certutil -config "&lt;host&gt;\&lt;CA name&gt;"</code> against the configured CA.</p>
+        <h4>To configure</h4>
+        <p>Settings → Certificate Authority: CA host (FQDN) and CA common name. The run-as identity needs <strong>Issue &amp; Manage Certificates</strong> on that CA.</p>
+        <div class="feature-meta"><code>GET /api/ca/{certs,pending}</code><code>POST /api/ca/{publish-crl,revoke,approve,deny,backup}</code></div>
+      </div>
+
+      <div class="feature" id="f-events">
+        <div class="feature-head"><h3>Event Viewer</h3><span class="pill info">new in 3.29</span></div>
+        <p>Reads a remote Windows server's event log over RPC — the same channel the graphical Event Viewer uses — so issues can be triaged without an RDP session. Filter by server, log (System/Application/Security/Setup), severity, time window, and free text or event ID.</p>
+        <h4>To configure</h4>
+        <p>The target server needs the <strong>“Remote Event Log Management”</strong> firewall rules enabled, and the API service account needs <strong>Event Log Readers</strong> (or admin) rights on it. The Security log typically needs elevated rights beyond that.</p>
+        <div class="feature-meta"><code>GET /api/events?server=&amp;log=&amp;hours=&amp;levels=&amp;q=</code></div>
+      </div>
+
+      <div class="feature" id="f-diag">
+        <div class="feature-head"><h3>Diagnostics</h3><span class="pill ok">read-only</span></div>
+        <p>Domain-controller health (discovers DCs three ways, then checks NTDS/DNS/Netlogon/KDC/W32Time/DFSR/ADWS), Exchange component health (any number of hosts), and a test-message tool that can either simulate or genuinely send through your SMTP server.</p>
+        <h4>To configure</h4>
+        <p>Targets need the <strong>“Remote Service Management”</strong> firewall rules enabled. A blocked ping does not, by itself, mean a host is reported unreachable — the service query is attempted regardless.</p>
+        <div class="feature-meta"><code>GET /api/diag/dcs</code><code>POST /api/diag/exchange</code><code>POST /api/diag/message</code></div>
+      </div>
+
+      <div class="feature" id="f-access">
+        <div class="feature-head"><h3>Access Control</h3></div>
+        <p>Two independent checks happen at sign-in, and this page configures both — read it as two questions, not one:</p>
+        <ul>
+          <li><strong>Can this user sign in at all?</strong> Controlled by the <em>Require security-group membership</em> toggle + the one group picked in <em>Access security group</em>. When off, any valid domain credential can sign in.</li>
+          <li><strong>What role do they get once they're in?</strong> Controlled by <em>Group → role mapping</em> — a table of LDAP groups, each mapped to a console role. A user matching no mapped group signs in as Read-only, even if they passed the check above.</li>
+        </ul>
+        <p>Below that: the built-in local administrator's live status (enable/disable — reads from and drives the same account as the row in Local accounts, they can't drift apart), the local break-glass accounts list, and the MFA / SSO toggles.</p>
+        <h4>To configure</h4>
+        <p>Add at least one role mapping to <strong>System Administrator</strong> — this is the “Connect an LDAP admin group” setup task.</p>
+        <div class="callout warn" style="margin:12px 0 0;">
+          <div class="dot"></div>
+          <p><strong>MFA is console-side only</strong> Enabling it prompts for a 6-digit code, but the API does not verify it server-side yet — don't rely on it as your only second factor in production.</p>
+        </div>
+        <div class="feature-meta"><code>GET/POST/DELETE /api/access/mappings</code><code>GET/POST /api/access/local</code><code>POST /api/access/local/:id/toggle</code><code>POST /api/access/require-group</code></div>
+      </div>
+
+      <div class="feature" id="f-data">
+        <div class="feature-head"><h3>Data Source</h3></div>
+        <p>The console's own SQL connection: host, port, database, auth mode, encryption. Two distinct test buttons: <strong>“Test server &amp; list databases”</strong> checks the values currently in the form; <strong>“Test saved connection”</strong> checks what's actually saved in <code>config.json</code> — they are not redundant, they test different things.</p>
+        <div class="feature-meta"><code>POST /api/db/{test,config}</code><code>GET /api/db/info</code><code>POST /api/db/{migrate,backup}</code></div>
+      </div>
+
+      <div class="feature" id="f-settings">
+        <div class="feature-head"><h3>Settings</h3></div>
+        <p>General (LDAP server, Base DN, contractor OUs, sign-in domains), Connection (Demo/Live, API URL), Database, Certificate Authority, Access, and a config export/import (real JSON download / file-picker restore).</p>
+        <div class="feature-meta"><code>POST /api/config</code></div>
+      </div>
+    </section>
+
+    <hr class="rule">
+
+    <section id="troubleshooting">
+      <h2>Troubleshooting</h2>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>Symptom</th><th>Cause</th><th>Fix</th></tr></thead>
+          <tbody>
+            <tr><td><code>Cannot generate SSPI context</code> during install</td><td>SQL connection forced <code>Encrypt=True</code> against an on-prem server with no matching TLS cert</td><td>Already fixed by default (<code>Encrypt=False</code>); if you still see it, confirm you're on the latest installer</td></tr>
+            <tr><td><code>/api/db/info</code> or any call returns 500</td><td>SQL Server unreachable while using SQL-login auth</td><td>Fixed in 3.22.7 — verify SQL creds in Data Source, check <code>logs\dsmt-sql.log</code></td></tr>
+            <tr><td>DC / Exchange check shows “unreachable” but the server is fine</td><td>ICMP (ping) blocked on the network</td><td>Fixed in 3.29.1 — ping is a hint only, the service query still runs</td></tr>
+            <tr><td>Service won't start after a manual copy</td><td>Files not deployed to a permanent location, or a stale service registration</td><td>Re-run the installer (idempotent) rather than copying files by hand</td></tr>
+            <tr><td>Console shows CORS errors in Live mode</td><td><code>Api.CorsOrigins</code> doesn't include the console's URL</td><td>Set it to the exact console origin in <code>config.json</code>, restart the service</td></tr>
+            <tr><td>“Login failed for user 'DOMAIN\HOST$'”</td><td>The service's runtime identity (not the installer's) lacks SQL rights</td><td>Grant <code>db_datareader</code>/<code>db_datawriter</code> to that identity on <code>DSMTOOL</code></td></tr>
+            <tr><td>Event Viewer / Diagnostics: Access Denied on a target</td><td>Service account missing local rights on that specific server</td><td>Add it to Event Log Readers / local Administrators there — see <a href="#permissions">Permissions</a></td></tr>
+            <tr><td>Access Control: a user signs in but is stuck on Read-only</td><td>They passed the access-group check but no group they belong to is mapped to a role</td><td>Add a role mapping for one of their groups — see <a href="#f-access">Access Control</a></td></tr>
+            <tr><td>Windows service shows <strong>Running</strong>, but every API call gets <code>ERR_CONNECTION_REFUSED</code></td><td>The child process is crash-looping (check <code>dsmt-service.log</code> for a repeating restart) or <code>http.sys</code> refused the bind for a non-admin service account</td><td>Fixed in 3.29.13/3.29.14 — a bad <code>$using:</code> chained member-access crashed Pode at startup, and the URL ACL reservation is now automatic; if still stuck, check <code>dsmt-service.log</code> and run the <code>netsh http add urlacl</code> command above by hand</td></tr>
+            <tr><td>Browser console: <code>Access-Control-Allow-Origin header contains multiple values '*, *'</code></td><td>Duplicate CORS header stamped on 401 responses</td><td>Fixed in 3.29.14</td></tr>
+            <tr><td>Installer step 9 (Deploy console to IIS) throws <code>HRESULT: 0x800710D8</code></td><td>Stale <code>WebAdministration</code> provider handle right after rebinding an existing IIS site in the same session</td><td>Fixed in 3.29.14 — falls back to <code>appcmd start site</code> automatically</td></tr>
+            <tr><td>"First run? Sign in with the local default administrator" signs you in, but Settings shows placeholder values (<code>SQL-01</code>, <code>dc01.lab.local</code>) and Save/Test buttons return <code>401</code></td><td>That shortcut only faked a signed-in state client-side without ever calling the real login API</td><td>Fixed in 3.29.15 — it now performs a real sign-in and loads live data</td></tr>
+            <tr><td>Sign-in fails with <code>Unexpected end of JSON input</code></td><td>An unhandled exception in <code>/api/auth/login</code> (e.g. LDAP server unreachable) returned an empty <code>500</code></td><td>Fixed in 3.29.15 — returns a readable error instead</td></tr>
+            <tr><td>Console fails to load at all: <code>Error unpacking</code> or <code>Invalid regular expression</code> in the browser console</td><td>A corrupted escape sequence in the bundled <code>index.html</code> template broke the embedded JS</td><td>Fixed in 3.29.7–3.29.12 — update to the latest <code>index.html</code></td></tr>
+            <tr><td>Console never loads / shows a CORS error even though the API is healthy</td><td><code>index.html</code> was opened directly as a <code>file://</code> path instead of through IIS</td><td>Always browse to the IIS URL (e.g. <code>http://&lt;server&gt;:8080</code>), never open the HTML file directly — browsers refuse to treat a local file as a valid CORS origin</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Server-side logs live at <code>&lt;InstallDir&gt;\logs\</code> — <code>dsmt-error.log</code>, <code>dsmt-request.log</code>, <code>dsmt-sql.log</code>, <code>dsmt-service.log</code>.</p>
+    </section>
+
+    <section id="registry">
+      <h2>Registry metadata</h2>
+      <p>The installer writes deployment metadata (not settings) to <code>HKLM:\SOFTWARE\DSMT</code> — useful for inventory scripts and support tooling. Actual configuration always lives in <code>config.json</code> and SQL, which the API and console already read.</p>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>Value</th><th>Meaning</th></tr></thead>
+          <tbody>
+            <tr><td><code>InstallDir</code></td><td>Root install path</td></tr>
+            <tr><td><code>Version</code></td><td>Installed DSMT version</td></tr>
+            <tr><td><code>ApiPort</code> / <code>FrontendPort</code></td><td>Configured ports</td></tr>
+            <tr><td><code>ConfigPath</code></td><td>Full path to <code>config.json</code></td></tr>
+            <tr><td><code>SetupMode</code></td><td><code>script</code> or <code>browser-pending</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="uninstall">
+      <h2>Uninstall</h2>
+      <pre class="code">.\Uninstall-DSMT.ps1 -Yes</pre>
+      <p>Stops and removes the <code>DSMT-Api</code> service, deletes the install folder, and removes the <code>HKLM:\SOFTWARE\DSMT</code> registry key. <strong>Logs are kept by default</strong> (<code>&lt;InstallDir&gt;\logs</code>) so a failed install can still be diagnosed afterward — pass <code>-RemoveLogs</code> to delete those too. The IIS site, firewall rules and SQL database are all left in place unless explicitly requested:</p>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>Switch</th><th>Effect</th></tr></thead>
+          <tbody>
+            <tr><td><code>-RemoveIisSite</code></td><td>Also removes the IIS site and its webroot (<code>C:\inetpub\dsmt</code> by default)</td></tr>
+            <tr><td><code>-RemoveFirewall</code></td><td>Also removes the DSMT API/Console firewall rules</td></tr>
+            <tr><td><code>-RemoveDatabase</code></td><td>Prompts for the SQL server/database, then <strong>permanently drops it</strong> — requires retyping the database name to confirm, even with <code>-Yes</code></td></tr>
+            <tr><td><code>-RemoveLogs</code></td><td>Deletes <code>&lt;InstallDir&gt;\logs</code> too (kept by default)</td></tr>
+            <tr><td><code>-Yes</code></td><td>Skips the confirmation prompt (unattended)</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Full cleanup before a fresh reinstall, keeping the database and logs:</p>
+      <pre class="code">.\Uninstall-DSMT.ps1 -RemoveIisSite -RemoveFirewall -Yes</pre>
+    </section>
+
+    <section id="layout">
+      <h2>File &amp; folder layout</h2>
+      <p>This is the structure the accompanying deployment ZIP is packaged in — matching exactly what the installer expects on disk.</p>
+      <pre class="code">DSMT-Deploy/
+├─ Install.cmd                    <span class="c">← double-click to start (Windows)</span>
+├─ Start-Install.ps1               <span class="c">← self-elevating bootstrap, called by Install.cmd</span>
+├─ Uninstall-DSMT.ps1
+├─ install-answers_sample.json     <span class="c">← copy to install-answers.json for zero-prompt installs</span>
+├─ README.md
+├─ CHANGELOG.md
+├─ index.html                      <span class="c">← the console (deployed to IIS)</span>
+└─ server/
+   ├─ Install-DSMT.ps1             <span class="c">← the all-in-one installer</span>
+   ├─ Install.ps1                  <span class="c">← manual/granular installer</span>
+   ├─ DSMT_Api.ps1                 <span class="c">← the REST API entry point</span>
+   ├─ config.sample.json           <span class="c">← copy to config.json</span>
+   ├─ modules/
+   │  ├─ Auth.psm1
+   │  ├─ Db.psm1
+   │  ├─ Directory.psm1
+   │  ├─ Sync.psm1
+   │  ├─ Contractor.psm1
+   │  ├─ CertAuthority.psm1
+   │  ├─ Secrets.psm1
+   │  └─ Diagnostics.psm1
+   └─ sql/
+      └─ schema.sql</pre>
+      <p>After the installer runs, this same layout is copied to <code>C:\Program Files\DSMT\</code> (or your <code>-InstallDir</code>) and the console lands at <code>C:\inetpub\dsmt\index.html</code>.</p>
+    </section>
+
+    <div class="callout note" style="margin-top:60px;">
+      <div class="dot"></div>
+      <p><strong>Version</strong> This guide describes DSMT 3.29.15. See <code>CHANGELOG.md</code> for the full release history.</p>
+    </div>
+  </main>
+</div>
+
+<div class="back-top"><a href="#overview" aria-label="Back to top">↑</a></div>
+
+<script>
+  var btn = document.getElementById('menuBtn');
+  var nav = document.getElementById('tocNav');
+  if (btn) btn.addEventListener('click', function(){ nav.classList.toggle('open'); });
+  document.querySelectorAll('nav.toc a').forEach(function(a){
+    a.addEventListener('click', function(){ nav.classList.remove('open'); });
+  });
+
+  var links = Array.prototype.slice.call(document.querySelectorAll('nav.toc a'));
+  var targets = links.map(function(a){ return document.querySelector(a.getAttribute('href')); }).filter(Boolean);
+  if ('IntersectionObserver' in window) {
+    var io = new IntersectionObserver(function(entries){
+      entries.forEach(function(entry){
+        if (!entry.isIntersecting) return;
+        var id = '#' + entry.target.id;
+        links.forEach(function(a){ a.classList.toggle('active', a.getAttribute('href') === id); });
+      });
+    }, { rootMargin: '-10% 0px -75% 0px' });
+    targets.forEach(function(t){ io.observe(t); });
+  }
+</script>
+</body>
+</html>
