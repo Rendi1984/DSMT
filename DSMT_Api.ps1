@@ -600,7 +600,8 @@ WHEN NOT MATCHED THEN INSERT(Username,ConsoleRole,PwHash,PwSalt,Iterations,Enabl
         $s = Get-Session $WebEvent; if (-not $s) { Write-401; return }
         $sam = $WebEvent.Data.sam
         $name = if ($WebEvent.Data.name) { $WebEvent.Data.name } else { $sam }
-        $ou   = if ($WebEvent.Data.ou)   { $WebEvent.Data.ou }   else { $using:Config.Directory.BaseDN }
+        $cfg = $using:Config
+        $ou   = if ($WebEvent.Data.ou)   { $WebEvent.Data.ou }   else { $cfg.Directory.BaseDN }
         if (-not $sam) { Set-PodeResponseStatus -Code 400; Write-PodeJsonResponse -Value @{ ok=$false; error='sam is required' }; return }
         $initPw = 'Tmp-' + [guid]::NewGuid().ToString('N').Substring(0,10) + '!Aa1'
         try {
