@@ -191,8 +191,18 @@ WHEN NOT MATCHED THEN INSERT(Username,ConsoleRole,PwHash,PwSalt,Iterations,Enabl
     Add-PodeRoute -Method Post -Path '/api/auth/login' -ScriptBlock {
         $cfg = $using:Config
         $b = $WebEvent.Data
-        $r = Invoke-SignIn -Config $cfg -Domain $b.domain -Username $b.username -Password $b.password
         $ip = $WebEvent.Request.RemoteEndPoint.Address.ToString()
+        # Wrap the whole sign-in attempt: an unreachable LDAP server or a bad
+        # bind throws inside Invoke-SignIn/Test-LdapCredential, and an
+        # unhandled exception here returns a raw empty 500 to the browser
+        # (surfaces as "Unexpected end of JSON input" client-side) instead of
+        # a readable error - always give the console a JSON body to show.
+        try {
+            $r = Invoke-SignIn -Config $cfg -Domain $b.domain -Username $b.username -Password $b.password
+        } catch {
+            Write-Audit -Actor $b.username -Action 'Console sign-in' -Target 'console' -Result 'Error' -Kind 'auth' -Detail $_.Exception.Message -SourceIp $ip
+            Set-PodeResponseStatus -Code 502; Write-PodeJsonResponse -Value @{ error = 'Directory unreachable: ' + $_.Exception.Message }; return
+        }
         if (-not $r.Ok) {
             Write-Audit -Actor $b.username -Action 'Console sign-in' -Target 'console' -Result 'Denied' -Kind 'auth' -Detail $r.Reason -SourceIp $ip
             Set-PodeResponseStatus -Code 401; Write-PodeJsonResponse -Value @{ error = $r.Reason }; return
