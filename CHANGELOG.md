@@ -1,5 +1,8 @@
 # Changelog
 All notable changes to the Directory Services Management Tool.
+## 3.29.16
+- Added a friendly `GET /` response on the API (`DSMT_Api.ps1`) for anyone browsing straight to `http://<api-host>:8780/` out of curiosity or while troubleshooting - previously returned a raw `405 Method Not Allowed`, which reads like a real error even though it's expected (the API has no home page; it's only meant to be called via the console or `/api/...` paths). Also quiets the automatic `GET /favicon.ico` browsers send. No functional change to any real endpoint.
+
 ## 3.29.15
 **Two more real bugs found from lab testing, both about the "First run" local-admin shortcut and login error handling:**
 - **"First run? Sign in with the local default administrator" never actually signed in against the API in Live mode** - it only faked an authenticated client-side state (`authed: true`) without ever calling `/api/auth/login`, so `apiToken` stayed `null`. Every authenticated call afterward (Settings -> Database, General, Save changes, etc.) got a silent `401`, and screens that show real config (Database server, LDAP host) kept displaying the built-in demo placeholder values (`SQL-01`, `dc01.lab.local`) instead of the real ones from `config.json`, because the load-on-sign-in calls (`loadDbInfoLive`, `loadHealthLive`, `loadAlertsLive`) never ran. Fixed: in Live mode this button now performs a real `/api/auth/login` with the documented default credentials (`admin`/local account) and loads live data exactly like a normal sign-in.

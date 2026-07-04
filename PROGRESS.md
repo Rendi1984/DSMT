@@ -7,7 +7,7 @@ useful context under "Notes" so a fresh session (with no chat history) can
 pick up immediately.
 
 ## Current version
-3.29.15 (API + Console) — see `CHANGELOG.md` for the authoritative log.
+3.29.16 (API + Console) — see `CHANGELOG.md` for the authoritative log.
 
 ## Open tasks
 - Waiting on user confirmation that a fresh `-SetupViaBrowser` install now
@@ -66,6 +66,10 @@ pick up immediately.
   live-editable settings - keep it that way to avoid two stores drifting.
 
 ## Recently completed (most recent first)
+- 3.29.16: Added a friendly `GET /` (and `GET /favicon.ico`) response on the
+  API - browsing straight to the API's own URL previously returned a raw
+  405 Method Not Allowed, which read like a real error even though it's
+  expected (no home page, API-only routes). Cosmetic, no functional change.
 - Moved `Deployment_Guide.html` into the repo (previously excluded, download-only)
   as a tracked, committed root file. Updated it to v3.29.15: new troubleshooting
   rows for every bug found this session (API crash-loop, duplicate CORS header,

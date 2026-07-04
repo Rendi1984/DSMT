@@ -107,6 +107,16 @@ Start-PodeServer {
     }
     Add-PodeRoute -Method Options -Path '*' -ScriptBlock { Set-PodeResponseStatus -Code 204 }
 
+    # Friendly response for anyone browsing straight to the API's own URL
+    # (no /api/... path) - this API has no home page, but a raw 405 "Method
+    # Not Allowed" (Pode's default here, because the OPTIONS catch-all above
+    # technically "knows" every path) reads like a real error. GET /favicon.ico
+    # is covered too, since browsers request it automatically for any page.
+    Add-PodeRoute -Method Get -Path '/' -ScriptBlock {
+        Write-PodeJsonResponse -Value @{ service = 'DSMT API'; status = 'up'; health = '/api/health'; docs = 'See README.md / Deployment_Guide.html' }
+    }
+    Add-PodeRoute -Method Get -Path '/favicon.ico' -ScriptBlock { Set-PodeResponseStatus -Code 204 }
+
     # Write-401 stamps CORS headers before setting 401 so browsers never see
     # a CORS failure masking an auth failure (the preflight succeeds, but
     # the real request returns 401 - without CORS headers that looks like CORS).
