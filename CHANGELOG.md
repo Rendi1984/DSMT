@@ -1,5 +1,10 @@
 # Changelog
 All notable changes to the Directory Services Management Tool.
+## 3.29.4
+**Access Control page: fixed a fake control and clarified the two-step access model.**
+- **Fixed: the "Local default administrator" enable/disable switch did nothing in Live mode.** It was driven by its own client-only `localAdminEnabled` flag, completely disconnected from the real local-accounts list right below it (which already had a correctly wired, working toggle for the same account). An admin could flip the top switch believing they'd disabled break-glass access when nothing happened server-side. The card now reads its status from — and its switch calls the same live toggle as — the actual built-in account row, and shows its real username instead of a hardcoded "administrator" (the browser wizard now defaults it to `admin`).
+- **Clarified the relationship between the access security group and role mapping** — added an explanation that the access group only gates *whether* a domain user can sign in, while role mapping decides *which* role they get; a user can pass the access-group check and still land on Read-only if no group maps them to a role.
+- **Labeled the MFA toggle honestly**: it's a console-side gate only — the API does not yet verify the 6-digit code server-side. Real server-side TOTP remains a backlog item (see `TODO_FIXES.md`).
 ## 3.29.3
 - **Fixed a filename mismatch that would break the Windows service registration.** `Install-DSMT.ps1` (3 places), `Install.ps1` and `README.md` referenced `DSMT.Api.ps1` (dot), but the file in the repo has always been `DSMT_Api.ps1` (underscore) — Step 5 (register + start the API service) would compile a service host pointing at a script that doesn't exist. Corrected every reference, including the script's own header comment.
 ## 3.29.2
