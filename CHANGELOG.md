@@ -1,5 +1,13 @@
 # Changelog
 All notable changes to the Directory Services Management Tool.
+## 3.29.13
+**Fixes the API failing to start on every fresh install** (console shows "Failed to fetch" / `ERR_CONNECTION_REFUSED` on every Live-mode call, even though `Get-Service DSMT-Api` reports "Running").
+- **Root cause**: the `POST /api/users` (create user) route used `$using:Config.Directory.BaseDN` - a member-access chain directly on a `$using:` scoped variable. Pode's startup scope scanner (`Find-PodeScopedVariableUsingVariableValue`) cannot resolve this pattern on Windows PowerShell 5.1 and throws `Exception calling "ContainsKey"... Key cannot be null` while parsing **all** routes at server startup - before any request is even served. This crashes the whole Pode process immediately on every start.
+- Because the API runs as a Windows service via a native wrapper that respawns the crashing child process every 3 seconds, `Get-Service` keeps reporting "Running" indefinitely while the actual HTTP listener never comes up - so every browser call fails with a generic network error, with no indication in the UI of what's wrong.
+- Fixed by capturing `$using:Config` to a local variable first (`$cfg = $using:Config`) and then accessing `.Directory.BaseDN` on the local copy, matching the pattern already used everywhere else in the file.
+- Also hardens both installers (`Install-DSMT.ps1`, `Install.ps1`) to automatically reserve the `http.sys` URL ACL (`netsh http add urlacl`) for the service's logon account when registering `DSMT-Api` - a separate, pre-existing gap that would otherwise cause the same "service shows Running but nothing listens" symptom for any account other than a fully-elevated one.
+- **If you're on an already-broken install**: pull this fix, replace `DSMT_Api.ps1`, then `Restart-Service DSMT-Api` (no reinstall needed). Check `C:\Program Files\DSMT\logs\dsmt-service.log` to confirm the `Find-PodeScopedVariableUsingVariableValue` error is gone and the log shows the "listening on http://..." line.
+
 ## 3.29.12
 **Third and final fix, same incident as 3.29.7/3.29.8** - after the first two fixes, verification (JSON-parse of the bundled template + `node --check` on the extracted class body) still found three more corrupted regex/string literals in the Secrets Manager code, all the same class of bug: a JSON-encoding script used one backslash where two were required, so the shipped file decoded to a broken (unterminated or wrong-direction) regex instead of the intended one.
 - `exportDl`/`exportPwExp` CSV row separator: `.join('\r\n')` had landed as real CR+LF bytes instead of the literal text `\r\n`, which is not valid inside a JS string literal - fixed to decode correctly.

@@ -161,6 +161,26 @@ public class DsmtService : ServiceBase {
     & sc.exe config DSMT-Api obj= "$obj" password= "$svcPlain" | Out-Null
     & sc.exe failure DSMT-Api reset= 86400 actions= restart/5000/restart/5000/restart/5000 | Out-Null
     try { & icacls "$logDir" /grant ("{0}:(OI)(CI)M" -f $obj) /T | Out-Null } catch {}
+
+    # http.sys requires an explicit URL ACL reservation for any non-admin logon
+    # account (NetworkService, a domain service account, a gMSA) to bind an
+    # HTTP endpoint - Pode's http listener uses http.sys underneath. Without
+    # this, Add-PodeEndpoint throws "Access is denied" *inside* the child
+    # process every time it starts; the service still shows "Running" (it
+    # just keeps respawning the crashing child), so the API silently never
+    # listens and every request gets connection-refused.
+    $apiPort = 8780
+    try { $apiPort = [int](Get-Content $cfgPath -Raw | ConvertFrom-Json).Api.Port } catch {}
+    $urlAclUrl = "http://+:$apiPort/"
+    try {
+        $existing = & netsh http show urlacl url=$urlAclUrl 2>$null
+        if ($existing -match 'Reserved URL') { & netsh http delete urlacl url=$urlAclUrl | Out-Null }
+        & netsh http add urlacl url=$urlAclUrl user="$obj" | Out-Null
+        Write-Host "URL ACL reserved for $obj on $urlAclUrl" -ForegroundColor Green
+    } catch {
+        Write-Warning "Could not reserve the URL ACL ($urlAclUrl) for $obj - the API will fail to bind. Run as admin: netsh http add urlacl url=$urlAclUrl user=`"$obj`""
+    }
+
     Start-Service DSMT-Api
     Write-Host "Service DSMT-Api installed and started (logon: $obj; logs: $logDir)." -ForegroundColor Green
 }

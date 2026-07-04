@@ -484,6 +484,23 @@ public class DsmtService : ServiceBase {
     # Let the service account write to the log folder (Program Files is read-only otherwise).
     try { & icacls "$logDir" /grant ("{0}:(OI)(CI)M" -f $obj) /T | Out-Null; Ok ("Log folder: {0}" -f $logDir) } catch { Note "Could not set permissions on $logDir : $($_.Exception.Message)" }
 
+    # http.sys requires an explicit URL ACL reservation for any non-admin logon
+    # account (NetworkService, a domain service account, a gMSA) to bind an
+    # HTTP endpoint - Pode's http listener uses http.sys underneath. Without
+    # this, Add-PodeEndpoint throws "Access is denied" *inside* the child
+    # process every time it starts; the native service wrapper still shows
+    # "Running" (it just keeps respawning the crashing child), so the API
+    # silently never listens and every request gets connection-refused.
+    $urlAclUrl = "http://+:$ApiPort/"
+    try {
+        $existing = & netsh http show urlacl url=$urlAclUrl 2>$null
+        if ($existing -match 'Reserved URL') { & netsh http delete urlacl url=$urlAclUrl | Out-Null }
+        & netsh http add urlacl url=$urlAclUrl user="$obj" | Out-Null
+        Ok "URL ACL reserved for $obj on $urlAclUrl"
+    } catch {
+        Note "Could not reserve the URL ACL ($urlAclUrl) for $obj - the API will fail to bind. Run as admin: netsh http add urlacl url=$urlAclUrl user=`"$obj`""
+    }
+
     # Open the API port (lab convenience).
     try { New-NetFirewallRule -DisplayName "DSMT API $ApiPort" -Direction Inbound -Action Allow -Protocol TCP -LocalPort $ApiPort -ErrorAction SilentlyContinue | Out-Null } catch {}
 

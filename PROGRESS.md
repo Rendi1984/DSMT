@@ -7,11 +7,14 @@ useful context under "Notes" so a fresh session (with no chat history) can
 pick up immediately.
 
 ## Current version
-3.29.12 (API + Console) — see `CHANGELOG.md` for the authoritative log.
+3.29.13 (API + Console) — see `CHANGELOG.md` for the authoritative log.
 
 ## Open tasks
-- None blocking right now. The v3.29.7-3.29.12 console-loading incident
-  (JSON/regex corruption in `index.html`) is fully resolved and merged.
+- Waiting on user confirmation that a fresh `-SetupViaBrowser` install now
+  fully works end-to-end (v3.29.13 fixed the API crash-loop; not yet
+  confirmed in the user's lab).
+- The v3.29.7-3.29.12 console-loading incident (JSON/regex corruption in
+  `index.html`) is fully resolved and merged.
 - Consider updating `.claude/skills/dsmt-dev-workflow/SKILL.md`'s verification
   checklist to include the method proven necessary during that incident:
   `JSON.parse` on the extracted `__bundler/template` string, then
@@ -38,6 +41,11 @@ pick up immediately.
   About modal x2, `buildConfig()`) only when `index.html` itself changes.
 
 ## Recently completed (most recent first)
+- 3.29.13: Fixed the API crash-looping on every start (`$using:Config.Directory.BaseDN`
+  chained member-access broke Pode's startup scope scanner on PS 5.1) - this
+  is what caused "Failed to fetch" / connection-refused on every Live-mode
+  call even though the Windows service showed "Running". Also hardened both
+  installers to auto-reserve the http.sys URL ACL for the service account.
 - 3.29.12: Fixed remaining under-escaped backslash regexes in Secrets
   Manager (`rotateSecretLive`, `saveSecretLive`, secrets loader) and the CSV
   join separator — completed the 3.29.7 incident fix.
