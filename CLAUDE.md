@@ -46,6 +46,8 @@ config.sample.json  → server/
 install-answers_sample.json → root/
 CHANGELOG.md        → root/
 README.md           → root/
+Deployment_Guide.html → root/  ← full step-by-step guide, keep in sync with every change
+PROGRESS.md         → root/
 CLAUDE.md           → root/  ← this file
 ```
 
@@ -79,9 +81,13 @@ finishing:
   in addition to the PR, build and send the user a deployment ZIP with every
   file in the correct on-server folder layout (mirrors the table in
   "File locations" above: root files loose, `server/`, `server/modules/`,
-  `server/sql/`). Stage into a scratch folder, `zip -r` it, and send it via
-  `SendUserFile` — don't just describe the changed files and expect the user
-  to reassemble the package themselves.
+  `server/sql/`, including `Deployment_Guide.html`). Stage into a scratch
+  folder, `zip -r` it, and send it via `SendUserFile` — don't just describe
+  the changed files and expect the user to reassemble the package themselves.
+- **`Deployment_Guide.html` is a tracked, committed file** (root) — keep it in
+  sync with every change that affects install steps, ports/firewall rules,
+  permissions, troubleshooting symptoms, or the version number. Update it in
+  the same PR as the code change, not as an afterthought.
 
 ---
 
@@ -146,5 +152,4 @@ All scripts must be **Windows PowerShell 5.1 compatible**:
 - Screenshot PNG files
 - `_image-slots_state.json`
 - `support.js`, `image-slot.js` (source-only build helpers)
-- `Deployment_Guide.html` (optional reference only)
 - `source/` folder files (editable build — needs internet, not deployed)

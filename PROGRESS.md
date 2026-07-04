@@ -66,6 +66,14 @@ pick up immediately.
   live-editable settings - keep it that way to avoid two stores drifting.
 
 ## Recently completed (most recent first)
+- Moved `Deployment_Guide.html` into the repo (previously excluded, download-only)
+  as a tracked, committed root file. Updated it to v3.29.15: new troubleshooting
+  rows for every bug found this session (API crash-loop, duplicate CORS header,
+  Start-Website COMException, First-run fake auth, unhandled login exception),
+  an offline/air-gap install callout, an http.sys URL ACL note, and expanded
+  the Uninstall section with all the real switches. `CLAUDE.md` now mandates
+  keeping it in sync with every install/ports/permissions/troubleshooting change,
+  in the same PR as the code change.
 - 3.29.15: Fixed "First run? Sign in with the local default administrator"
   never actually authenticating against the API in Live mode (was faking
   client-side auth state only, so every subsequent authenticated call 401'd
