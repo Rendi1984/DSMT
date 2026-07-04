@@ -1,5 +1,8 @@
 # Changelog
 All notable changes to the Directory Services Management Tool.
+## 3.29.6
+- **`Install-DSMT.ps1`: new `-Offline` and `-WindowsFeatureSource` switches for fully air-gapped installs.** `-Offline` skips every network call outright (no PSGallery attempt for Pode, no `Enable-WindowsOptionalFeature -Online` fallback for RSAT/IIS) and fails immediately with the exact fix needed instead of hanging on a connection timeout. `-WindowsFeatureSource` passes `-Source` through to `Install-WindowsFeature` for RSAT-AD-PowerShell and the IIS role, for Windows images that had their local component-store source files stripped.
+- **README: new "Fully offline / air-gapped installs" section** documenting the only two things that ever need internet (Pode, and occasionally the Windows Feature source) and the exact one-time prep steps — everything else (SQL, AD, the console) has never needed a download.
 ## 3.29.5
 - **Removed two Google Fonts `<link rel="preconnect">` tags left over in `index.html`** (`fonts.googleapis.com`, `fonts.gstatic.com`). The actual font files were already bundled locally (the `@font-face` rules reference embedded resources, not the Google CDN), so these were dead leftovers from wherever the font CSS was originally copied from — but they still made the browser attempt an outbound HTTPS connection to Google on every page load, contradicting the documented "fully offline, no internet required" design. Audited the rest of the bundle: no other external `http(s)://` references found.
 ## 3.29.4
