@@ -1,5 +1,8 @@
 # Changelog
 All notable changes to the Directory Services Management Tool.
+## 3.29.19
+- **Added a file:// misuse warning banner to the console** (`index.html`): opening `index.html` directly from disk (double-clicking it in Explorer) keeps recurring during lab testing, and it can never work in Live mode - the browser treats a local file as origin `null` and blocks its API calls outright, before they even leave the machine (which is also why nothing shows up in `dsmt-request.log` when this happens). The console now detects `file://` at load and shows a dismissible red banner: open the console through IIS at `http://localhost:8080` (or the server hostname) instead. No behavior change when served properly over HTTP.
+
 ## 3.29.18
 **One real server bug (sign-in HTTP 500) + two console 404 noise fixes, all found from the user's `dsmt-error.log` and browser console:**
 - **Sign-in returned HTTP 500** (`Db.psm1`): `Invoke-Sql` bound *every* SQL parameter as `NVarChar(max)`. Plain column INSERT/WHERE usage survives via implicit conversion, but the session INSERT passes `@h` to `DATEADD(hour, @h, ...)` - a typed T-SQL function argument - and SQL Server rejects it outright: `Argument data type nvarchar(max) is invalid for argument 2 of dateadd`. So login authenticated successfully and then blew up creating the session row. Fixed with type-aware binding (bool -> Bit, int/long -> BigInt, datetime -> DateTime2, everything else stays NVarChar).

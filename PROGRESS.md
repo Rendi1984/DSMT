@@ -7,7 +7,7 @@ useful context under "Notes" so a fresh session (with no chat history) can
 pick up immediately.
 
 ## Current version
-3.29.18 (API + Console) — see `CHANGELOG.md` for the authoritative log.
+3.29.19 (API + Console) — see `CHANGELOG.md` for the authoritative log.
 
 ## Open tasks
 - Waiting on user confirmation that a fresh `-SetupViaBrowser` install now
@@ -72,6 +72,13 @@ pick up immediately.
   live-editable settings - keep it that way to avoid two stores drifting.
 
 ## Recently completed (most recent first)
+- 3.29.19: Added a file:// misuse warning banner to the console - the user
+  repeatedly opened `C:\inetpub\dsmt\index.html` directly from Explorer,
+  which makes the browser block all API calls (origin `null`) before they
+  leave the machine, so nothing appears in the server logs either. The
+  console now detects `file://` at load and shows a dismissible red banner
+  pointing to `http://localhost:8080`. Verified: banner renders under
+  file://, absent over HTTP, app boots clean either way.
 - 3.29.18: Fixed sign-in HTTP 500 - `Invoke-Sql` (Db.psm1) bound every SQL
   parameter as NVarChar(max); `DATEADD(hour, @h, ...)` in the session INSERT
   rejects a string argument, so login authenticated and then crashed creating
