@@ -59,10 +59,9 @@ Also grep for each new `*Live` handler you added — it should appear **exactly 
 
 ## 3. PowerShell rules (all `.ps1` / `.psm1` files)
 
-Windows PowerShell 5.1 compatibility is MANDATORY:
-- No `??`, no ternary `? :`, no `&&` / `||`
-- ASCII only — no smart quotes, em-dashes, or unicode punctuation in code
-- After any edit: `python3 -c "c=open(f,encoding='utf-8').read(); print(sum(1 for ch in c if ord(ch)>127), c.count('{'), c.count('}'))"` — non-ascii must be 0, braces must match
+Windows PowerShell 5.1 compatibility is MANDATORY in this repo — see the separate **`powershell-scripting`** skill for the general rules (no `??`/ternary/`&&`, ASCII-only, brace-balance check, here-string/`$using:`/case-sensitivity gotchas). DSMT-specific on top of that:
+- Every `.ps1`/`.psm1` file in this repo must pass the ASCII + brace-balance check before committing.
+- Module functions are imported fresh per Pode route/runspace (see `DSMT_Api.ps1`'s `foreach ($m in 'Db','Auth',...)`) — don't assume `$script:`-scoped state survives between requests.
 
 ## 4. Versioning
 
