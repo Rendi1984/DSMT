@@ -88,6 +88,15 @@ finishing:
   sync with every change that affects install steps, ports/firewall rules,
   permissions, troubleshooting symptoms, or the version number. Update it in
   the same PR as the code change, not as an afterthought.
+- **Always state exactly which file(s) changed and where to copy them**, every
+  time a fix ships — the user should hot-swap individual files on an already
+  running install instead of uninstalling/reinstalling from scratch. Format:
+  `<file> -> <on-server path>` plus the one required follow-up action. Examples:
+  - `DSMT_Api.ps1` / any `modules/*.psm1` -> `<InstallDir>\server\` (or `\server\modules\`), then `Restart-Service DSMT-Api`
+  - `index.html` -> the IIS webroot (e.g. `C:\inetpub\dsmt\index.html`), then hard-refresh the browser (Ctrl+F5) — no service restart needed
+  - `config.sample.json`, `schema.sql` -> informational only unless the user is re-running `-InitDb`/`-RegisterService`; don't imply a reinstall is needed
+  - `Install-DSMT.ps1` / `Install.ps1` / `Uninstall-DSMT.ps1` -> only relevant on the **next** install/uninstall run, not to an already-running instance
+  Only recommend a full uninstall+reinstall when the change actually requires it (e.g. a schema migration with no in-place path, or the user's install is already in a broken/inconsistent state).
 
 ---
 
