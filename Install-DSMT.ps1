@@ -182,7 +182,7 @@ if (-not $SkipDeploy) {
         Ok "Already running from the install location ($targetServer)."
     } else {
         New-Item -ItemType Directory -Path $targetServer -Force | Out-Null
-        # Copy the whole server folder (DSMT.Api.ps1, modules, sql, vendor, installers).
+        # Copy the whole server folder (DSMT_Api.ps1, modules, sql, vendor, installers).
         Copy-Item -Path (Join-Path $here '*') -Destination $targetServer -Recurse -Force
         # The console (index.html) is deployed straight to IIS later - no need to
         # stage a copy under Program Files. Point the IIS step at the original file.
@@ -389,7 +389,7 @@ if (-not $SkipService) {
 
     $psExe = (Get-Command pwsh -ErrorAction SilentlyContinue).Source
     if (-not $psExe) { $psExe = (Get-Command powershell).Source }
-    $api    = Join-Path $here "DSMT.Api.ps1"
+    $api    = Join-Path $here "DSMT_Api.ps1"
     $svcExe = Join-Path $here "DSMT-Api-Service.exe"
 
     # Remove any prior registration so re-runs are clean (also frees the .exe).
@@ -474,7 +474,7 @@ public class DsmtService : ServiceBase {
     else { $st = "unknown"; if ($svc) { $st = $svc.Status }; Note "Service DSMT-Api installed but status is $st. Check the Application event log." }
 } else {
     Note "Skipping service registration (-SkipService). Foreground start:"
-    Note "    powershell -NoProfile -ExecutionPolicy Bypass -File `"$(Join-Path $here 'DSMT.Api.ps1')`""
+    Note "    powershell -NoProfile -ExecutionPolicy Bypass -File `"$(Join-Path $here 'DSMT_Api.ps1')`""
 }
 
 # ===========================================================================

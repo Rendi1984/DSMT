@@ -9,7 +9,7 @@ Browser (index.html, Live mode)
         │  HTTPS + Bearer token
         ▼
 PowerShell REST API (Pode)  ──►  Active Directory (LDAP + RSAT cmdlets)
-   server/DSMT.Api.ps1        ──►  SQL Server (config, audit, roles, sessions)
+   server/DSMT_Api.ps1        ──►  SQL Server (config, audit, roles, sessions)
                               ──►  AD Connect server (delta sync, PSRemoting)
                               ──►  AD Certificate Services (certutil)
 ```
@@ -132,7 +132,7 @@ A **local, domain‑independent** account for first run / when LDAP is down:
 ## 5. Run the API
 Foreground (for testing):
 ```powershell
-pwsh ./DSMT.Api.ps1      # or:  powershell -File .\DSMT.Api.ps1
+pwsh ./DSMT_Api.ps1      # or:  powershell -File .\DSMT_Api.ps1
 ```
 As a Windows service (auto‑start) — a native service host is compiled and registered automatically. `-ServiceAccount` is **optional**:
 ```powershell
@@ -188,7 +188,7 @@ HTTPS binding, or give Pode a cert (`Api.Protocol=https`, `Api.CertThumbprint`).
 ### Files
 ```
 server/
-  DSMT.Api.ps1            REST API (Pode) — all endpoints
+  DSMT_Api.ps1            REST API (Pode) — all endpoints
   Install.ps1             prereqs / DB init / seed local admin / service
   config.sample.json      copy to config.json and edit
   sql/schema.sql          database schema + seed data

@@ -102,7 +102,7 @@ if ($RegisterService) {
     Write-Host '== Registering Windows service ==' -ForegroundColor Cyan
     $pwsh = (Get-Command pwsh -ErrorAction SilentlyContinue).Source
     if (-not $pwsh) { $pwsh = (Get-Command powershell).Source }
-    $api    = Join-Path $here 'DSMT.Api.ps1'
+    $api    = Join-Path $here 'DSMT_Api.ps1'
     $svcExe = Join-Path $here 'DSMT-Api-Service.exe'
 
     $existing = Get-Service -Name DSMT-Api -ErrorAction SilentlyContinue
