@@ -19,6 +19,35 @@ PowerShell REST API (Pode)  ──►  Active Directory (LDAP + RSAT cmdlets)
 
 ---
 
+## Fully offline / air-gapped installs
+
+Every part of DSMT is designed to run with zero internet access — but the *installer*
+needs two things staged in advance if the app server has none at all:
+
+| Dependency | Default source | Air-gapped fix |
+|---|---|---|
+| **Pode** (API framework) | PowerShellGallery.com | Prep `server\vendor\Pode` once (see below) |
+| **RSAT-AD-PowerShell / IIS role** | Local Windows component store (works out of the box on most servers) | If the image had source files stripped, pass `-WindowsFeatureSource` |
+| Everything else (SQL, AD, the console itself) | Nothing — no download ever needed | — |
+
+**One-time prep, on any PC with internet** (does not need to be domain-joined or related to the target server at all):
+```powershell
+Save-Module -Name Pode -Path .\vendor
+```
+Copy the resulting `vendor\Pode\` folder into this package's `server\vendor\Pode\`, then install with:
+```powershell
+.\Install-DSMT.ps1 -Offline -SqlServer SQL01 -LdapServer DC01.lab.local -BaseDN "DC=lab,DC=local"
+```
+`-Offline` makes the installer **skip every network call outright** (no PSGallery, no Windows Update fallback) and fail immediately with the exact fix needed, instead of hanging on a timeout. If the target's Windows Feature source was stripped from the image, add:
+```powershell
+.\Install-DSMT.ps1 -Offline -WindowsFeatureSource "D:\sources\sxs" ...
+```
+(`D:\sources\sxs` = a mounted Windows Server ISO/ESD, or an extracted `install.wim`.)
+
+The console itself (`index.html`) has no external references at all (fonts, scripts, everything is embedded) — nothing to prepare there.
+
+---
+
 ## Quick install — one script (recommended)
 
 On the domain-joined app server, in an **elevated Windows PowerShell**:

@@ -80,7 +80,14 @@ param(
     # Bootstrap-only install: skip every SQL / directory / admin question, leave
     # config.json blank so the API starts in SETUP MODE, and finish the whole
     # configuration in the browser setup wizard instead.
-    [switch] $SetupViaBrowser
+    [switch] $SetupViaBrowser,
+
+    # Fully air-gapped install: never attempt any network call for prerequisites
+    # (no PSGallery, no Windows Update). Requires .\vendor\Pode to be pre-staged
+    # (see README "Fully offline / air-gapped installs") and, on a stripped Windows
+    # image, -WindowsFeatureSource pointing at a local install-media \sources\sxs.
+    [switch] $Offline,
+    [string] $WindowsFeatureSource = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -202,15 +209,23 @@ if (-not $SkipDeploy) {
 # ===========================================================================
 if (-not $SkipPrereqs) {
     Step "Install prerequisites (RSAT-AD + Pode)"
+    if ($Offline) { Note "Offline mode: no PSGallery or Windows Update calls will be attempted." }
 
     # RSAT AD tools
-    try { Install-WindowsFeature RSAT-AD-PowerShell -ErrorAction Stop | Out-Null; Ok "RSAT-AD-PowerShell present." }
+    $rsatArgs = @{ Name = "RSAT-AD-PowerShell"; ErrorAction = "Stop" }
+    if ($WindowsFeatureSource) { $rsatArgs["Source"] = $WindowsFeatureSource }
+    try { Install-WindowsFeature @rsatArgs | Out-Null; Ok "RSAT-AD-PowerShell present." }
     catch {
-        try { Enable-WindowsOptionalFeature -Online -FeatureName RSATClient-Roles-AD-Powershell -All -NoRestart -ErrorAction Stop | Out-Null; Ok "RSAT AD tools enabled." }
-        catch { Note "Could not auto-install RSAT AD tools: $($_.Exception.Message)" }
+        if ($Offline) {
+            Note "Could not install RSAT-AD-PowerShell from a local source: $($_.Exception.Message)"
+            Note "OFFLINE FIX: pass -WindowsFeatureSource pointing at <mounted Windows ISO>\sources\sxs (or a local WIM), then re-run."
+        } else {
+            try { Enable-WindowsOptionalFeature -Online -FeatureName RSATClient-Roles-AD-Powershell -All -NoRestart -ErrorAction Stop | Out-Null; Ok "RSAT AD tools enabled." }
+            catch { Note "Could not auto-install RSAT AD tools: $($_.Exception.Message)" }
+        }
     }
 
-    # Pode - online from PSGallery, or offline from .\vendor\Pode
+    # Pode - offline from .\vendor\Pode, or online from PSGallery (skipped entirely with -Offline)
     if (Get-Module -ListAvailable Pode) {
         Ok "Pode already installed."
     } else {
@@ -221,6 +236,11 @@ if (-not $SkipPrereqs) {
             New-Item -ItemType Directory -Path $dest -Force | Out-Null
             Copy-Item -Path (Join-Path $vendorPode "*") -Destination $dest -Recurse -Force
             Ok "Pode installed (offline)."
+        } elseif ($Offline) {
+            Note "OFFLINE FIX: on any PC with internet, run:"
+            Note "    Save-Module -Name Pode -Path .\vendor"
+            Note "  then copy the resulting server\vendor\Pode folder here and re-run with -Offline."
+            throw "Pode is required to run the API and .\vendor\Pode was not found (-Offline set, skipping PSGallery)."
         } else {
             try {
                 # Install the NuGet provider + trust PSGallery up front so PowerShellGet
@@ -487,9 +507,15 @@ if (-not $SkipFrontend) {
     if (-not (Test-Path $ConsoleFile)) { throw "Console file not found: $ConsoleFile  - pass -ConsoleFile with the path to the offline index.html." }
 
     # Enable IIS (Server vs client OS).
+    $iisArgs = @{ Name = @("Web-Server","Web-Static-Content","Web-Mgmt-Console"); ErrorAction = "Stop" }
+    if ($WindowsFeatureSource) { $iisArgs["Source"] = $WindowsFeatureSource }
     try {
-        Install-WindowsFeature -Name Web-Server,Web-Static-Content,Web-Mgmt-Console -ErrorAction Stop | Out-Null
+        Install-WindowsFeature @iisArgs | Out-Null
     } catch {
+        if ($Offline) {
+            Note "OFFLINE FIX: pass -WindowsFeatureSource pointing at <mounted Windows ISO>\sources\sxs (or a local WIM), then re-run."
+            throw "Could not enable IIS from a local source: $($_.Exception.Message)"
+        }
         Enable-WindowsOptionalFeature -Online -FeatureName IIS-WebServerRole,IIS-WebServer,IIS-StaticContent,IIS-WebServerManagementTools,IIS-ManagementConsole -All -NoRestart | Out-Null
     }
     Import-Module WebAdministration
