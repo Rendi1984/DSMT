@@ -7,13 +7,22 @@ useful context under "Notes" so a fresh session (with no chat history) can
 pick up immediately.
 
 ## Current version
-3.29.14 (API + Console) — see `CHANGELOG.md` for the authoritative log.
+3.29.15 (API + Console) — see `CHANGELOG.md` for the authoritative log.
 
 ## Open tasks
 - Waiting on user confirmation that a fresh `-SetupViaBrowser` install now
-  fully works end-to-end. Found and fixed 3 blocking bugs across 3.29.13/
-  3.29.14 (API crash-loop, duplicate CORS header on 401s, Start-Website
-  COMException in the installer) - not yet confirmed clean in the user's lab.
+  fully works end-to-end. Found and fixed 5 blocking bugs across 3.29.13-
+  3.29.15 (API crash-loop, duplicate CORS header on 401s, Start-Website
+  COMException in the installer, "First run" local-admin button never
+  actually authenticating in Live mode, unhandled exception in
+  `/api/auth/login` returning an empty 500) - not yet confirmed clean in the
+  user's lab.
+- User asked about moving basic settings (SQL server, DC, domain DN) into
+  the Windows registry so they persist more reliably. Decided NOT to do this
+  (see Notes) - the real bug was the fake-auth issue above, not the storage
+  mechanism. If it comes up again, explain why `config.json` staying the
+  single source of truth is preferable to a second registry copy that can
+  drift out of sync.
 - User is testing with the browser AND SQL Server on the SAME machine as the
   API/IIS (not a separate client) - remember this when reasoning about future
   reports from them (e.g. "localhost" ambiguity doesn't apply the same way).
@@ -48,7 +57,21 @@ pick up immediately.
 - Version bump policy: bump in all 5 places (sidebar footer, overview badge,
   About modal x2, `buildConfig()`) only when `index.html` itself changes.
 
+## Notes for next session
+- Registry vs config.json for settings: `config.json` is re-read fresh from
+  disk on every relevant API call (`Get-DbInfo`, `Get-Config`, etc.), so it's
+  already a reliable single source of truth once auth actually works. The
+  `HKLM:\SOFTWARE\DSMT` registry key is intentionally scoped to one-time
+  deployment metadata (site name, ports) written by the installer, not
+  live-editable settings - keep it that way to avoid two stores drifting.
+
 ## Recently completed (most recent first)
+- 3.29.15: Fixed "First run? Sign in with the local default administrator"
+  never actually authenticating against the API in Live mode (was faking
+  client-side auth state only, so every subsequent authenticated call 401'd
+  and Settings screens kept showing demo placeholder values instead of the
+  real config). Also added error handling to `/api/auth/login` so an
+  unreachable LDAP server returns a readable error instead of an empty 500.
 - 3.29.14: Fixed duplicate CORS header on 401 responses (`Add-PodeHeader` ->
   `Set-PodeHeader`, was producing invalid `*, *` and getting requests blocked
   by the browser) and a Start-Website COMException in `Install-DSMT.ps1`'s
