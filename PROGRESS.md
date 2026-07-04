@@ -72,6 +72,13 @@ pick up immediately.
   live-editable settings - keep it that way to avoid two stores drifting.
 
 ## Recently completed (most recent first)
+- Added `iis-reverse-proxy.web.config` (optional) + a guide section for the
+  single-origin IIS reverse-proxy deployment the console already advertises
+  ("Behind IIS reverse proxy"). Key gotcha documented: never add IIS CORS
+  `customHeaders` on /api - the API already sends them and a duplicate
+  reproduces the 3.29.14 `*, *` bug. User had asked whether an ARR/CORS IIS
+  setup could fix the F12 blocks - it can't (those were file:// origin
+  blocks, unfixable server-side), but same-origin proxy is a good option.
 - 3.29.19: Added a file:// misuse warning banner to the console - the user
   repeatedly opened `C:\inetpub\dsmt\index.html` directly from Explorer,
   which makes the browser block all API calls (origin `null`) before they
