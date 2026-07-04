@@ -57,6 +57,17 @@ C:\inetpub\dsmt\index.html      ← console (IIS port 8080)
 
 ---
 
+## Session notes (MANDATORY)
+`PROGRESS.md` (repo root) is the persistent memory between chat/coding
+sessions — a new session with no chat history must be able to read it and
+continue. Every session that changes the project MUST update it before
+finishing:
+- Move finished work into "Recently completed".
+- Add anything still open (bugs found but not fixed, follow-ups the user
+  mentioned but didn't ask for yet, things to verify next time) to "Open
+  tasks".
+- Record any non-obvious context a fresh session would need under "Notes".
+
 ## How changes are delivered
 - In git-connected sessions (Claude Code / GitHub): develop on a feature branch,
   commit, push, open a PR and merge to `main` — `main` is the source of truth.
