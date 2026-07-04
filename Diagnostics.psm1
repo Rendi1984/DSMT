@@ -4,7 +4,10 @@
   check Exchange components, and send/simulate a test message.
 
   Requires the ActiveDirectory module (RSAT) for discovery. Service probes use
-  Get-Service via CIM/WinRM so the API service account needs remote query rights.
+  Get-Service -ComputerName (RPC to the remote Service Control Manager), so the
+  targets must allow the 'Remote Service Management' firewall rules and the API
+  service account needs remote query rights on them. ICMP ping is used only as
+  a hint - probing still proceeds when ping is blocked.
 #>
 
 function Get-DomainControllers {
@@ -37,23 +40,34 @@ function Get-DomainControllers {
 $script:DcServices = 'NTDS','DNS','Netlogon','KDC','W32Time','DFSR','ADWS'
 
 function Test-DcServices {
-    <# Probes the standard DC services on each host. Returns per-host results. #>
+    <# Probes the standard DC services on each host. Ping is only a hint: when
+       ICMP is blocked the RPC service query is attempted anyway, and the host
+       counts as reachable if any service answers. If the host looks truly dead
+       (ping fails AND the Service Control Manager cannot be opened), remaining
+       probes are skipped to avoid stacking RPC timeouts. #>
     param([string[]] $Hosts, [string[]] $Services = $script:DcServices)
     $out = @()
     foreach ($h in $Hosts) {
         $svcResults = @()
-        $reachable = Test-Connection -ComputerName $h -Count 1 -Quiet -ErrorAction SilentlyContinue
+        $ping = Test-Connection -ComputerName $h -Count 1 -Quiet -ErrorAction SilentlyContinue
+        $answered = $false
+        $scmDown  = $false
         foreach ($s in $Services) {
             $state = 'unknown'
-            if ($reachable) {
-                try { $state = (Get-Service -ComputerName $h -Name $s -ErrorAction Stop).Status.ToString() }
-                catch { $state = 'missing' }
+            if (-not $scmDown) {
+                try { $state = (Get-Service -ComputerName $h -Name $s -ErrorAction Stop).Status.ToString(); $answered = $true }
+                catch {
+                    if ($_.Exception -is [Microsoft.PowerShell.Commands.ServiceCommandException]) { $state = 'missing'; $answered = $true }
+                    elseif ($ping) { $state = 'missing' }
+                    else { $scmDown = $true }
+                }
             }
             $svcResults += [pscustomobject]@{ name = $s; status = $state }
         }
+        $reachable = ([bool]$ping -or $answered)
         $running = ($svcResults | Where-Object { $_.status -eq 'Running' }).Count
         $out += [pscustomobject]@{
-            host = $h; reachable = [bool]$reachable
+            host = $h; reachable = $reachable
             healthy = ($reachable -and $running -eq $Services.Count)
             running = $running; total = $Services.Count
             services = $svcResults
@@ -70,21 +84,29 @@ $script:ExchangeServices = @(
 )
 
 function Test-ExchangeServer {
-    <# Checks the main Exchange component services on a host. #>
+    <# Checks the main Exchange component services on a host. Same ping-is-only-
+       a-hint behavior as Test-DcServices. #>
     param([Parameter(Mandatory)][string] $ExchangeHost, [string[]] $Services = $script:ExchangeServices)
-    $reachable = Test-Connection -ComputerName $ExchangeHost -Count 1 -Quiet -ErrorAction SilentlyContinue
+    $ping = Test-Connection -ComputerName $ExchangeHost -Count 1 -Quiet -ErrorAction SilentlyContinue
     $results = @()
+    $answered = $false
+    $scmDown  = $false
     foreach ($s in $Services) {
         $state = 'unknown'
-        if ($reachable) {
-            try { $state = (Get-Service -ComputerName $ExchangeHost -Name $s -ErrorAction Stop).Status.ToString() }
-            catch { $state = 'missing' }
+        if (-not $scmDown) {
+            try { $state = (Get-Service -ComputerName $ExchangeHost -Name $s -ErrorAction Stop).Status.ToString(); $answered = $true }
+            catch {
+                if ($_.Exception -is [Microsoft.PowerShell.Commands.ServiceCommandException]) { $state = 'missing'; $answered = $true }
+                elseif ($ping) { $state = 'missing' }
+                else { $scmDown = $true }
+            }
         }
         $results += [pscustomobject]@{ name = $s; status = $state }
     }
+    $reachable = ([bool]$ping -or $answered)
     $running = ($results | Where-Object { $_.status -eq 'Running' }).Count
     return [pscustomobject]@{
-        host = $ExchangeHost; reachable = [bool]$reachable
+        host = $ExchangeHost; reachable = $reachable
         healthy = ($reachable -and $running -eq $Services.Count)
         running = $running; total = $Services.Count; services = $results
     }
