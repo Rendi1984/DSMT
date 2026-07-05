@@ -214,6 +214,7 @@
       <div class="toc-group-label">After install</div>
       <a href="#first-signin">First sign-in &amp; setup tasks</a>
       <a href="#demo-live">Demo vs. Live mode</a>
+      <a href="#remote-access">Remote / by server name</a>
       <a href="#reverse-proxy">IIS reverse proxy (optional)</a>
     </div>
 
@@ -528,6 +529,26 @@ notepad config.json</pre><p>Set <strong>Database</strong>, <strong>Directory</st
       <h2>Demo vs. Live mode</h2>
       <p>The console always ships with <strong>Demo</strong> as a fully-working mode — realistic sample data, works completely offline, nothing is ever sent anywhere. It's meant to stay available for pre-deployment demos, training, or showing the product without touching a real environment.</p>
       <p><strong>Live</strong> mode routes every action through the real API against your real AD / SQL / CA. Switch between them any time from the <strong>Demo / Live toggle</strong> on the sign-in screen (API URL shown when Live is selected) — the choice and API URL persist across browser refreshes. A DEMO/LIVE badge in the top bar always shows which one is active.</p>
+    </section>
+
+    <section id="remote-access">
+      <div class="eyebrow">Network</div>
+      <h2>Accessing by server name, or from another machine</h2>
+      <p>Both the console (IIS) and the API (<code>Api.ListenAddress = 0.0.0.0</code>) already listen on every network interface, not just <code>127.0.0.1</code> — nothing in the app restricts this to the local machine. To reach DSMT by hostname, or from a computer other than the one running it:</p>
+
+      <div class="callout crit">
+        <div class="dot"></div>
+        <p><strong>Never use <code>localhost</code></strong> in the browser or in Settings → Connection → API base URL unless you are physically on the app server. From a remote machine, <code>localhost</code> resolves to <em>that</em> machine, not the server — this is the single most common cause of "it works on the server but not from my laptop."</p>
+      </div>
+
+      <ol class="steps">
+        <li><h4>Use the real hostname or IP everywhere</h4><p>Browser address bar: <code>http://app01.lab.local:8080</code>. Settings → Connection → API base URL: <code>http://app01.lab.local:8780</code>.</p></li>
+        <li><h4>Confirm the firewall scope</h4><p><code>Install-DSMT.ps1</code> already opens inbound rules for both ports (<code>DSMT Console &lt;port&gt;</code>, <code>DSMT API &lt;port&gt;</code>) via <code>New-NetFirewallRule</code> — confirm the rule allows the client's subnet, not just local traffic.</p></li>
+        <li><h4>Confirm DNS resolves from the client</h4><p>The client machine must be able to resolve the server's hostname. If internal DNS is inconsistent (the same class of issue as the <code>sql01</code> vs. <code>sql01.lab.local</code> note under Prerequisites), use the IP address instead, or fix the client's DNS suffix search list.</p></li>
+        <li><h4>CORS won't block it</h4><p><code>Api.CorsOrigins</code> defaults to <code>["*"]</code> in <code>config.json</code>, so a remote browser is not blocked out of the box. Restrict it to the exact console URL once remote access is confirmed working (see the Security checklist in <code>README.md</code>).</p></li>
+      </ol>
+
+      <p>A simpler alternative that avoids the <code>localhost</code> mistake entirely for every user, local or remote: see <a href="#reverse-proxy">Single-origin via IIS reverse proxy</a> below — one URL, no separate API field to configure.</p>
     </section>
 
     <section id="reverse-proxy">
