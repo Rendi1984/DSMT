@@ -192,7 +192,7 @@
       <div class="brand-mark">DS</div>
       <div class="brand-name">DSMT</div>
     </div>
-    <div class="brand-sub">Deployment &amp; Reference · v3.29.21</div>
+    <div class="brand-sub">Deployment &amp; Reference · v3.29.22</div>
 
     <div class="toc-group">
       <div class="toc-group-label">Start here</div>
@@ -542,6 +542,7 @@ notepad config.json</pre><p>Set <strong>Database</strong>, <strong>Directory</st
         </div>
       </div>
       <p>Both alerts clear automatically once resolved — no need to dismiss them by hand.</p>
+      <p>Since 3.29.22, the same two checks also surface directly on <strong>Settings → Access &amp; Permissions</strong> — the tab label itself shows a warning marker while either task is pending, and the tab opens with a red callout listing exactly what's left, right where you'd go to fix it. Not just the bell.</p>
     </section>
 
     <section id="demo-live">
@@ -745,6 +746,7 @@ notepad config.json</pre><p>Set <strong>Database</strong>, <strong>Directory</st
             <tr><td>Setup wizard's <strong>test-server</strong> and <strong>create-db</strong> steps succeed every time, but <strong>Install never finishes</strong> and <code>/api/setup/save</code> never appears with any status in <code>dsmt-request.log</code> (even after 3.29.17's re-entrancy fix, over a proper <code>http://</code> URL)</td><td><code>POST /api/setup/save</code> read and wrote <code>$Config</code> as a bare variable instead of capturing it via <code>$using:Config</code> like every other route - Pode route scriptblocks run in their own runspace, so <code>$Config</code> was silently <code>$null</code> there and the route never reached <code>Save-Config</code></td><td>Fixed in 3.29.20 - the route now captures <code>$using:Config</code> correctly, same pattern as every other route</td></tr>
             <tr><td><code>dsmt-error.log</code> / <code>dsmt-sql.log</code> shows <code>Login failed for user 'NT AUTHORITY\SYSTEM'</code>, e.g. on sign-in (<code>HTTP 500</code>) or any SQL-backed action</td><td>SQL Server and the API are on the <em>same</em> machine, using Windows Integrated auth - a same-machine ("loopback") SSPI connection always presents as <code>NT AUTHORITY\SYSTEM</code> to SQL Server, not the service account or computer account you'd expect</td><td>Not a code bug - see the callout under <a href="#permissions">Permissions</a> for the exact SQL commands (grant that login, or switch to SQL Server authentication)</td></tr>
             <tr><td>An unrelated action (sign-in, a user action, a CA action, ...) fails with a raw, unhelpful <code>HTTP 500</code> whenever SQL is briefly unreachable</td><td><code>Write-Audit</code> (called fire-and-forget by nearly every route) had no error handling - any SQL hiccup while writing the audit log crashed the calling route too</td><td>Fixed in 3.29.21 - audit-log failures are now caught and logged to <code>dsmt-sql.log</code> instead of breaking the request; the session-creation step of sign-in is also now wrapped, returning a readable <code>502</code> instead of an empty <code>500</code></td></tr>
+            <tr><td>Settings -> General/Database/Certificate Authority "Save changes" returns <code>400 Bad Request</code> every time</td><td><code>Save-Config</code>'s file-path parameter defaulted to the bare <code>$cfgPath</code> script variable - invisible inside a Pode route's own runspace, same class of bug as the 3.29.20 <code>/api/setup/save</code> fix - so <code>Set-Content</code> threw on every call</td><td>Fixed in 3.29.22 - all 4 call sites now pass <code>-Path $using:cfgPath</code> explicitly</td></tr>
           </tbody>
         </table>
       </div>
@@ -820,7 +822,7 @@ notepad config.json</pre><p>Set <strong>Database</strong>, <strong>Directory</st
 
     <div class="callout note" style="margin-top:60px;">
       <div class="dot"></div>
-      <p><strong>Version</strong> This guide describes DSMT 3.29.21. See <code>CHANGELOG.md</code> for the full release history.</p>
+      <p><strong>Version</strong> This guide describes DSMT 3.29.22. See <code>CHANGELOG.md</code> for the full release history.</p>
     </div>
   </main>
 </div>
