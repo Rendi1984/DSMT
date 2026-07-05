@@ -122,6 +122,15 @@ Create a **test OU** and throw‑away users/groups so nothing real is touched.
   - **Issue & Manage Certificates** on the CA (for CA actions);
   - `db_owner` on the `DSMTOOL` database (or `db_datareader/writer` + execute).
 
+> **SQL Server on the same box as the API?** A same-machine ("loopback") Windows-auth
+> connection always presents to SQL Server as `NT AUTHORITY\SYSTEM` — not the service
+> account or computer account you'd expect — regardless of which identity actually
+> runs `DSMT-Api`. Either grant that login rights on `DSMTOOL`, or switch
+> `Database.Auth` to `SQL` and use a SQL Server login instead; see the Deployment
+> Guide's Permissions section for the exact commands. This trips up almost every
+> single-box lab setup, so check it first if sign-in fails with `Login failed for
+> user 'NT AUTHORITY\SYSTEM'` in `dsmt-error.log`.
+
 Install the tooling:
 ```powershell
 cd C:\DSMT\server

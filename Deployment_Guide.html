@@ -192,7 +192,7 @@
       <div class="brand-mark">DS</div>
       <div class="brand-name">DSMT</div>
     </div>
-    <div class="brand-sub">Deployment &amp; Reference · v3.29.20</div>
+    <div class="brand-sub">Deployment &amp; Reference · v3.29.21</div>
 
     <div class="toc-group">
       <div class="toc-group-label">Start here</div>
@@ -388,6 +388,25 @@
       <div class="callout warn">
         <div class="dot"></div>
         <p><strong>Security log is stricter</strong> Reading the <code>Security</code> event log in Event Viewer typically needs rights beyond Event Log Readers (e.g. membership that grants <code>SeSecurityPrivilege</code>) — expect Access Denied there until that's granted explicitly.</p>
+      </div>
+
+      <div class="callout crit">
+        <div class="dot"></div>
+        <p><strong>SQL Server on the same machine as the API: Windows auth logs in as <code>NT AUTHORITY\SYSTEM</code></strong> When SQL Server and the app server are the <em>same</em> machine and <code>Database.Auth</code> is <code>Windows</code>, a same-machine ("loopback") SSPI connection is a well-known Windows quirk: the login SQL Server actually sees is <code>NT AUTHORITY\SYSTEM</code> — regardless of whether the <code>DSMT-Api</code> service account is NetworkService, LocalSystem, or something else. This is <em>not</em> the computer account (<code>DOMAIN\HOST$</code>) you'd expect for a normal remote connection, and it trips up almost everyone testing SQL and the API on one box. Two fixes, pick one:</p>
+        <pre class="code">-- Option A: grant the loopback identity access (run once, as sysadmin)
+CREATE LOGIN [NT AUTHORITY\SYSTEM] FROM WINDOWS;
+USE DSMTOOL;
+CREATE USER [NT AUTHORITY\SYSTEM] FOR LOGIN [NT AUTHORITY\SYSTEM];
+ALTER ROLE db_datareader ADD MEMBER [NT AUTHORITY\SYSTEM];
+ALTER ROLE db_datawriter ADD MEMBER [NT AUTHORITY\SYSTEM];</pre>
+        <p style="margin-top:10px;">or, generally simpler when SQL and the API share a machine:</p>
+        <pre class="code">-- Option B: switch to SQL Server authentication instead of Windows auth
+-- (Settings -> Database -> Authentication -> SQL login, or during setup)
+CREATE LOGIN dsmt_svc WITH PASSWORD = 'a strong password';
+USE DSMTOOL;
+CREATE USER dsmt_svc FOR LOGIN dsmt_svc;
+ALTER ROLE db_datareader ADD MEMBER dsmt_svc;
+ALTER ROLE db_datawriter ADD MEMBER dsmt_svc;</pre>
       </div>
 
       <h3>IIS application pool identity</h3>
@@ -724,6 +743,8 @@ notepad config.json</pre><p>Set <strong>Database</strong>, <strong>Directory</st
             <tr><td>Sign-in authenticates but returns <code>HTTP 500</code>; <code>dsmt-error.log</code> shows <code>Argument data type nvarchar(max) is invalid for argument 2 of dateadd</code></td><td>The SQL helper bound every parameter as <code>NVarChar(max)</code>, which typed T-SQL function arguments like <code>DATEADD(hour, @h, ...)</code> reject - so creating the session row failed after a successful password check</td><td>Fixed in 3.29.18 (type-aware parameter binding in <code>Db.psm1</code>)</td></tr>
             <tr><td>Browser console shows a 404 for <code>.image-slots.state.json</code> and/or <code>favicon.ico</code> on every console load</td><td>Harmless design-tool leftovers - the logo image-slot always fetched a sidecar state file that never exists on a server, and the page had no favicon</td><td>Fixed in 3.29.18 - the sidecar fetch is skipped outside the design tool and a small inline favicon was embedded</td></tr>
             <tr><td>Setup wizard's <strong>test-server</strong> and <strong>create-db</strong> steps succeed every time, but <strong>Install never finishes</strong> and <code>/api/setup/save</code> never appears with any status in <code>dsmt-request.log</code> (even after 3.29.17's re-entrancy fix, over a proper <code>http://</code> URL)</td><td><code>POST /api/setup/save</code> read and wrote <code>$Config</code> as a bare variable instead of capturing it via <code>$using:Config</code> like every other route - Pode route scriptblocks run in their own runspace, so <code>$Config</code> was silently <code>$null</code> there and the route never reached <code>Save-Config</code></td><td>Fixed in 3.29.20 - the route now captures <code>$using:Config</code> correctly, same pattern as every other route</td></tr>
+            <tr><td><code>dsmt-error.log</code> / <code>dsmt-sql.log</code> shows <code>Login failed for user 'NT AUTHORITY\SYSTEM'</code>, e.g. on sign-in (<code>HTTP 500</code>) or any SQL-backed action</td><td>SQL Server and the API are on the <em>same</em> machine, using Windows Integrated auth - a same-machine ("loopback") SSPI connection always presents as <code>NT AUTHORITY\SYSTEM</code> to SQL Server, not the service account or computer account you'd expect</td><td>Not a code bug - see the callout under <a href="#permissions">Permissions</a> for the exact SQL commands (grant that login, or switch to SQL Server authentication)</td></tr>
+            <tr><td>An unrelated action (sign-in, a user action, a CA action, ...) fails with a raw, unhelpful <code>HTTP 500</code> whenever SQL is briefly unreachable</td><td><code>Write-Audit</code> (called fire-and-forget by nearly every route) had no error handling - any SQL hiccup while writing the audit log crashed the calling route too</td><td>Fixed in 3.29.21 - audit-log failures are now caught and logged to <code>dsmt-sql.log</code> instead of breaking the request; the session-creation step of sign-in is also now wrapped, returning a readable <code>502</code> instead of an empty <code>500</code></td></tr>
           </tbody>
         </table>
       </div>
@@ -799,7 +820,7 @@ notepad config.json</pre><p>Set <strong>Database</strong>, <strong>Directory</st
 
     <div class="callout note" style="margin-top:60px;">
       <div class="dot"></div>
-      <p><strong>Version</strong> This guide describes DSMT 3.29.20. See <code>CHANGELOG.md</code> for the full release history.</p>
+      <p><strong>Version</strong> This guide describes DSMT 3.29.21. See <code>CHANGELOG.md</code> for the full release history.</p>
     </div>
   </main>
 </div>

@@ -227,8 +227,12 @@ WHEN NOT MATCHED THEN INSERT(Username,ConsoleRole,PwHash,PwSalt,Iterations,Enabl
         }
         $token = New-Token
         $ttl = [int]$cfg.Api.TokenTtlHours
-        Invoke-Sql 'INSERT INTO dbo.Sessions(Token,Username,ConsoleRole,IsLocal,ExpiresAt) VALUES(@t,@u,@r,@l,DATEADD(hour,@h,SYSUTCDATETIME()))' `
-            @{ t=$token; u=$r.Username; r=$r.Role; l=([int][bool]$r.IsLocal); h=$ttl } -NonQuery | Out-Null
+        try {
+            Invoke-Sql 'INSERT INTO dbo.Sessions(Token,Username,ConsoleRole,IsLocal,ExpiresAt) VALUES(@t,@u,@r,@l,DATEADD(hour,@h,SYSUTCDATETIME()))' `
+                @{ t=$token; u=$r.Username; r=$r.Role; l=([int][bool]$r.IsLocal); h=$ttl } -NonQuery | Out-Null
+        } catch {
+            Set-PodeResponseStatus -Code 502; Write-PodeJsonResponse -Value @{ error = 'Database unreachable while creating the session: ' + $_.Exception.Message }; return
+        }
         Write-Audit -Actor $r.Username -Action 'Console sign-in' -Target 'console' -Result 'Success' -Kind 'auth' -SourceIp $ip
         # Flag well-known default credentials so the console can nag until they are changed.
         $defPw = ([bool]$r.IsLocal -and ($b.password -eq 'admin' -or $b.password -eq $b.username))
