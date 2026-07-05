@@ -36,8 +36,16 @@ $Config = Get-Content $cfgPath -Raw | ConvertFrom-Json
 
 function Save-Config {
     # Persists the in-memory $Config back to config.json (atomic-ish).
-    param($Cfg = $Config)
-    ($Cfg | ConvertTo-Json -Depth 8) | Set-Content -Path $cfgPath -Encoding UTF8
+    # $Path defaults to the main script's $cfgPath, which is correct when
+    # called from top-level script code - but every Pode route runs in its
+    # own runspace, where bare script variables like $cfgPath are not
+    # visible (same class of issue as $Config - see the 3.29.20 fix for
+    # /api/setup/save). Routes MUST pass -Path $using:cfgPath explicitly;
+    # relying on the default here silently threw "Cannot bind argument to
+    # parameter 'Path' because it is null" inside every route that calls
+    # Save-Config without passing it, surfacing as a generic 400.
+    param($Cfg = $Config, [string] $Path = $cfgPath)
+    ($Cfg | ConvertTo-Json -Depth 8) | Set-Content -Path $Path -Encoding UTF8
 }
 
 function Test-SetupComplete {
@@ -187,7 +195,7 @@ Start-PodeServer {
             if ($d.Directory.LdapServer) { $cfg.Directory.LdapServer = $d.Directory.LdapServer }
             if ($d.Directory.BaseDN)     { $cfg.Directory.BaseDN     = $d.Directory.BaseDN }
         }
-        Save-Config -Cfg $cfg
+        Save-Config -Cfg $cfg -Path $using:cfgPath
         try { Initialize-Db -DbConfig $cfg.Database -ProbeOnly; Initialize-Db -DbConfig $cfg.Database }
         catch { Write-PodeJsonResponse -Value @{ ok = $false; error = $_.Exception.Message }; return }
         # Optional: seed the break-glass local administrator collected by the wizard.
@@ -718,7 +726,7 @@ WHEN NOT MATCHED THEN INSERT(Username,ConsoleRole,PwHash,PwSalt,Iterations,Enabl
             if ($d.directory.ldapServer) { $cfg.Directory.LdapServer = $d.directory.ldapServer }
             if ($d.directory.baseDN)     { $cfg.Directory.BaseDN     = $d.directory.baseDN }
         }
-        try { Save-Config -Cfg $cfg; Write-PodeJsonResponse -Value @{ ok=$true } }
+        try { Save-Config -Cfg $cfg -Path $using:cfgPath; Write-PodeJsonResponse -Value @{ ok=$true } }
         catch { Set-PodeResponseStatus -Code 400; Write-PodeJsonResponse -Value @{ ok=$false; error=$_.Exception.Message } }
     }
     Add-PodeRoute -Method Post -Path '/api/ca/config' -ScriptBlock {
@@ -728,7 +736,7 @@ WHEN NOT MATCHED THEN INSERT(Username,ConsoleRole,PwHash,PwSalt,Iterations,Enabl
         if ($d.host)       { $cfg.CertificateAuthority.Host       = $d.host }
         if ($d.commonName) { $cfg.CertificateAuthority.CommonName = $d.commonName }
         $cfg.CertificateAuthority.ConfigString = "$($cfg.CertificateAuthority.Host)\$($cfg.CertificateAuthority.CommonName)"
-        try { Save-Config -Cfg $cfg; Write-PodeJsonResponse -Value @{ ok=$true } }
+        try { Save-Config -Cfg $cfg -Path $using:cfgPath; Write-PodeJsonResponse -Value @{ ok=$true } }
         catch { Set-PodeResponseStatus -Code 400; Write-PodeJsonResponse -Value @{ ok=$false; error=$_.Exception.Message } }
     }
     Add-PodeRoute -Method Post -Path '/api/db/config' -ScriptBlock {
@@ -742,7 +750,7 @@ WHEN NOT MATCHED THEN INSERT(Username,ConsoleRole,PwHash,PwSalt,Iterations,Enabl
         if ($null -ne $d.user)     { $cfg.Database.User     = $d.user }
         if ($null -ne $d.password) { $cfg.Database.Password = $d.password }
         if ($null -ne $d.encrypt) { $cfg.Database.Encrypt = [bool]$d.encrypt }
-        try { Save-Config -Cfg $cfg; Write-PodeJsonResponse -Value @{ ok=$true } }
+        try { Save-Config -Cfg $cfg -Path $using:cfgPath; Write-PodeJsonResponse -Value @{ ok=$true } }
         catch { Set-PodeResponseStatus -Code 400; Write-PodeJsonResponse -Value @{ ok=$false; error=$_.Exception.Message } }
     }
 

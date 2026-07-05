@@ -7,7 +7,7 @@ useful context under "Notes" so a fresh session (with no chat history) can
 pick up immediately.
 
 ## Current version
-3.29.21 (API + Console) — see `CHANGELOG.md` for the authoritative log.
+3.29.22 (API + Console) — see `CHANGELOG.md` for the authoritative log.
 
 ## Open tasks
 - CONFIRMED END TO END: the full install -> setup wizard -> sign-in chain
@@ -75,6 +75,16 @@ pick up immediately.
   live-editable settings - keep it that way to avoid two stores drifting.
 
 ## Recently completed (most recent first)
+- 3.29.22: Fixed Settings -> General/Database/CA "Save changes" returning
+  400 every time - Save-Config's -Path parameter defaulted to the bare
+  $cfgPath script variable, invisible inside a Pode route's own runspace
+  (same bug class as 3.29.20's /api/setup/save fix). All 4 call sites now
+  pass -Path $using:cfgPath explicitly. Also added the requested UI
+  feature: a first-time-setup indicator directly on the Access &
+  Permissions tab (warning marker on the tab label + a red callout inside
+  listing exactly what's pending - default password, LDAP admin group
+  mapping), not just the alerts bell. Clears automatically per-task, same
+  as the bell.
 - Full install/setup/sign-in chain confirmed working by the user: granted
   NT AUTHORITY\SYSTEM sysadmin in SQL (workaround for the loopback issue),
   signed in successfully as the local administrator from Install.cmd.
