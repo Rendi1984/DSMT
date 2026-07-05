@@ -206,15 +206,25 @@ WHEN NOT MATCHED THEN INSERT([Key],[Value],UpdatedBy) VALUES(@k,@v,@by);
 }
 
 function Write-Audit {
+    # Never let audit logging break the actual request. Every route in the
+    # API calls this (login, user actions, CA actions, etc.) without its own
+    # try/catch, expecting it to be fire-and-forget - if SQL is briefly
+    # unreachable (or the service identity lacks rights), a route as simple
+    # as sign-in would otherwise crash with an unrelated raw 500 that hides
+    # the actual problem. Failures here are logged to dsmt-sql.log instead.
     param(
         [string] $Actor, [string] $Action, [string] $Target,
         [ValidateSet('Success','Denied','Warning','Error')][string] $Result = 'Success',
         [string] $Kind = $null, [string] $Detail = $null, [string] $SourceIp = $null
     )
-    Invoke-Sql @'
+    try {
+        Invoke-Sql @'
 INSERT INTO dbo.AuditLog(Actor,Action,Target,Result,Kind,Detail,SourceIp)
 VALUES(@a,@ac,@t,@r,@k,@d,@ip)
 '@ @{ a=$Actor; ac=$Action; t=$Target; r=$Result; k=$Kind; d=$Detail; ip=$SourceIp } -NonQuery | Out-Null
+    } catch {
+        Write-DbLog ("Write-Audit failed (actor=$Actor action=$Action): " + $_.Exception.Message)
+    }
 }
 
 function Get-AuditLog {

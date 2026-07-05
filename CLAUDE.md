@@ -101,7 +101,7 @@ finishing:
 
 ---
 
-## Current version: 3.29.20 (API + Console)
+## Current version: 3.29.21 (API + Console)
 Check `CHANGELOG.md` (top entry) for the authoritative current version before
 picking the next number.
 

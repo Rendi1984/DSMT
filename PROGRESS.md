@@ -7,20 +7,18 @@ useful context under "Notes" so a fresh session (with no chat history) can
 pick up immediately.
 
 ## Current version
-3.29.20 (API + Console) — see `CHANGELOG.md` for the authoritative log.
+3.29.21 (API + Console) — see `CHANGELOG.md` for the authoritative log.
 
 ## Open tasks
-- Waiting on user confirmation that a fresh `-SetupViaBrowser` install now
-  fully works end-to-end. Found and fixed 8 blocking bugs across 3.29.13-
-  3.29.20 (API crash-loop, duplicate CORS header on 401s, Start-Website
-  COMException in the installer, "First run" local-admin button never
-  actually authenticating in Live mode, unhandled exception in
-  `/api/auth/login` returning an empty 500, a client-side re-entrancy race
-  in the setup wizard's Install button, sign-in HTTP 500 from untyped SQL
-  params, and finally `/api/setup/save` using a bare `$Config` reference
-  that was always `$null` in its route runspace) - 3.29.20 is the strongest
-  candidate yet for the actual root cause of "Install never finishes," but
-  still not yet confirmed clean end-to-end in the user's lab.
+- The setup wizard's Install step is now CONFIRMED working end-to-end
+  (3.29.20's fix) - user's dsmt-request.log showed test-server/create-db
+  succeeding and /api/health subsequently reporting a populated (non-SETUP-
+  MODE) config for the first time this session. Found and fixed 9 blocking
+  bugs total across 3.29.13-3.29.21. Remaining open item: waiting on user
+  confirmation that sign-in succeeds after they apply the SQL permission
+  fix (NT AUTHORITY\SYSTEM loopback issue, see README/Deployment Guide) -
+  this one is an environment/SQL config issue, not something further code
+  changes can fix.
 - Diagnostic method worth remembering: when the user reports "button does
   nothing," ask for BOTH `dsmt-service.log` (server-side process log) AND
   `dsmt-request.log` (every HTTP request Pode received) - cross-referencing
@@ -75,6 +73,22 @@ pick up immediately.
   live-editable settings - keep it that way to avoid two stores drifting.
 
 ## Recently completed (most recent first)
+- 3.29.21: Confirmed via user's logs that 3.29.20's /api/setup/save fix
+  worked (dsmt-request.log showed the DB actually got created and
+  config.json got populated for the first time this session). The next
+  failure (sign-in HTTP 500) turned out to be a real SQL permissions issue
+  in the environment (SQL Server and API on the same machine -> Windows
+  auth loopback connections present as NT AUTHORITY\SYSTEM to SQL Server,
+  not the service/computer account), not a code bug - but it exposed a
+  real robustness gap: Write-Audit (Db.psm1) had no error handling at all,
+  so any transient SQL failure there crashed whatever unrelated route
+  called it (login, user actions, CA actions, ...) with an unhelpful raw
+  500. Fixed: Write-Audit now catches and logs failures instead of
+  throwing; /api/auth/login's session-creation step is now also wrapped,
+  returning a readable 502 instead of an empty 500. Documented the
+  NT AUTHORITY\SYSTEM loopback gotcha with exact SQL fix commands in
+  README.md and Deployment_Guide.html (Permissions section + troubleshooting
+  table).
 - Added a "Remote access" section to README.md and Deployment_Guide.html
   (accessing by server name / from another machine): the app already
   listens on all interfaces, the fix is entirely about using the right
