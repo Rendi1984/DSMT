@@ -10,15 +10,17 @@ pick up immediately.
 3.29.21 (API + Console) — see `CHANGELOG.md` for the authoritative log.
 
 ## Open tasks
-- The setup wizard's Install step is now CONFIRMED working end-to-end
-  (3.29.20's fix) - user's dsmt-request.log showed test-server/create-db
-  succeeding and /api/health subsequently reporting a populated (non-SETUP-
-  MODE) config for the first time this session. Found and fixed 9 blocking
-  bugs total across 3.29.13-3.29.21. Remaining open item: waiting on user
-  confirmation that sign-in succeeds after they apply the SQL permission
-  fix (NT AUTHORITY\SYSTEM loopback issue, see README/Deployment Guide) -
-  this one is an environment/SQL config issue, not something further code
-  changes can fix.
+- CONFIRMED END TO END: the full install -> setup wizard -> sign-in chain
+  now works. User granted the NT AUTHORITY\SYSTEM SQL login sysadmin (fixed
+  the loopback permission issue) and successfully signed in as the local
+  administrator created by Install.cmd. Found and fixed 9 real blocking bugs
+  total across 3.29.13-3.29.21 this session (see Recently completed below
+  for the full list) - the install flow itself is no longer suspected of
+  hiding further bugs.
+- Told the user to scope the NT AUTHORITY\SYSTEM grant down from sysadmin
+  (server-wide) to just db_datareader/db_datawriter on DSMTOOL - sysadmin
+  works but is much broader than needed; not yet confirmed they've done
+  this narrowing.
 - Diagnostic method worth remembering: when the user reports "button does
   nothing," ask for BOTH `dsmt-service.log` (server-side process log) AND
   `dsmt-request.log` (every HTTP request Pode received) - cross-referencing
@@ -73,6 +75,11 @@ pick up immediately.
   live-editable settings - keep it that way to avoid two stores drifting.
 
 ## Recently completed (most recent first)
+- Full install/setup/sign-in chain confirmed working by the user: granted
+  NT AUTHORITY\SYSTEM sysadmin in SQL (workaround for the loopback issue),
+  signed in successfully as the local administrator from Install.cmd.
+  Recommended narrowing that grant to db_datareader/db_datawriter on
+  DSMTOOL only (least privilege, matches what the guide already documents).
 - 3.29.21: Confirmed via user's logs that 3.29.20's /api/setup/save fix
   worked (dsmt-request.log showed the DB actually got created and
   config.json got populated for the first time this session). The next
