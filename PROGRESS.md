@@ -7,14 +7,16 @@ useful context under "Notes" so a fresh session (with no chat history) can
 pick up immediately.
 
 ## Current version
-3.29.24 (API + Console) — see `CHANGELOG.md` for the authoritative log.
+3.29.25 (API + Console) — see `CHANGELOG.md` for the authoritative log.
 
 ## Open tasks
-- DL Groups "Generate" and "Create user" — no code bug found across 2
-  Explore-agent passes (client/route/module all wired correctly for both).
-  3.29.24 fixed the silent-failure pattern that was likely hiding the real
-  cause (list loaders now reset state + show the real error on failure) —
+- DL Groups "Generate" and "Create user" — no code bug found across 3
+  Explore-agent passes now (client/route/module all wired correctly for
+  both, re-confirmed in 3.29.25's follow-up API audit too). Silent-failure
+  pattern that was likely hiding the real cause is now fixed everywhere
+  found (list loaders reset state + show the real error on failure) —
   needs a live re-test to see the actual error message and root-cause it.
+  Stop re-guessing on this without new information from a live test.
 - The "what does Audit Log do" question from the user has not been answered
   yet — next session should explain the feature (reads `dbo.AuditLog`,
   logs user/CA/setting-change actions via `Write-Audit`, filterable by
@@ -84,6 +86,18 @@ pick up immediately.
   live-editable settings - keep it that way to avoid two stores drifting.
 
 ## Recently completed (most recent first)
+- 3.29.25: Follow-up pass after 3.29.24's `loadUsersLive` fix - ran 2 fresh
+  Explore agents (one over the console template, one over the API/PowerShell
+  routes) to check whether the same silent-failure pattern existed anywhere
+  else before closing this batch out. API side: nothing new found (all
+  `$using:` captures correct, `Write-401` consistent, DL Groups/Create User
+  confirmed correct for a 3rd time). Console side found the same bug in 5
+  more places - `loadHealthLive`, `loadAlertsLive`, `loadCaLive` (both certs
+  and pending-requests fetches), and all 3 fetches inside `loadAccessLive`
+  (role mappings, local accounts, secrets) - each now resets to `[]` and
+  shows a real error toast on failure instead of silently leaving stale
+  demo data on screen looking like real data. `index.html` only, no
+  PowerShell changes this round.
 - 3.29.24: A full live-console pass by the user turned up 10 issues in one
   message; root-caused and fixed 8 of them:
   (1) General/Backup tabs showed a stale/wrong LDAP server forever - no

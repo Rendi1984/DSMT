@@ -192,7 +192,7 @@
       <div class="brand-mark">DS</div>
       <div class="brand-name">DSMT</div>
     </div>
-    <div class="brand-sub">Deployment &amp; Reference · v3.29.24</div>
+    <div class="brand-sub">Deployment &amp; Reference · v3.29.25</div>
 
     <div class="toc-group">
       <div class="toc-group-label">Start here</div>
@@ -752,6 +752,7 @@ notepad config.json</pre><p>Set <strong>Database</strong>, <strong>Directory</st
             <tr><td>Event Viewer returns no results for any server, including the API's own host</td><td><code>Get-RemoteEvents</code> always used <code>Get-WinEvent -ComputerName</code>, forcing legacy RPC remoting and the "Remote Event Log Management" firewall rule even for a local self-query</td><td>Fixed in 3.29.24 - a local target now queries in-process, no RPC or firewall rule needed</td></tr>
             <tr><td>Diagnostics -> Domain Controllers shows almost every service amber/unreachable, even ones that are actually running</td><td><code>Test-DcServices</code> set a sticky flag on the first service-probe failure for a host and then marked every remaining service on that host "unknown" regardless of its real state</td><td>Fixed in 3.29.24 - each service is probed independently; also applies the same local-machine RPC-avoidance fix as Event Viewer to <code>Get-Service</code></td></tr>
             <tr><td>DL Groups "Generate" or "Create user" fails with no useful message</td><td>No code-level bug found in either path as of 3.29.24 - the underlying cause (likely AD permissions or a name/OU mismatch) was previously hidden by silent failures</td><td>3.29.24 makes list-loader failures surface the real error message instead of failing silently - re-test and check the surfaced error / <code>dsmt-error.log</code></td></tr>
+            <tr><td>Dashboard health, Alerts bell, Certificate Authority, or Access &amp; Permissions screens show data that looks live but never changes, even after a real API failure</td><td>Several <code>*Live</code> loaders (health, alerts, CA certs/pending, access role mappings/local accounts/secrets) had the same silent-catch pattern as the 3.29.24 <code>loadUsersLive</code> fix - since these fields default to non-empty demo data, a failed fetch left stale/fake data on screen with no visible error</td><td>Fixed in 3.29.25 - each now resets to empty and shows a real error toast on failure</td></tr>
           </tbody>
         </table>
       </div>
@@ -826,7 +827,7 @@ notepad config.json</pre><p>Set <strong>Database</strong>, <strong>Directory</st
 
     <div class="callout note" style="margin-top:60px;">
       <div class="dot"></div>
-      <p><strong>Version</strong> This guide describes DSMT 3.29.24. See <code>CHANGELOG.md</code> for the full release history.</p>
+      <p><strong>Version</strong> This guide describes DSMT 3.29.25. See <code>CHANGELOG.md</code> for the full release history.</p>
     </div>
   </main>
 </div>
