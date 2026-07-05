@@ -187,6 +187,38 @@ HTTPS binding, or give Pode a cert (`Api.Protocol=https`, `Api.CertThumbprint`).
 
 ---
 
+## 6b. Accessing by server name, or from another machine
+
+Both the console (IIS) and the API (`Api.ListenAddress = 0.0.0.0`) already listen on
+every network interface, not just `127.0.0.1` — nothing in the app restricts this.
+To reach DSMT by hostname, or from a different computer than the one running it:
+
+1. **Never use `localhost`** in the browser or in Settings → Connection → API base URL
+   unless you are physically on the app server. From a remote machine, `localhost`
+   resolves to *that* machine, not the server — this is the single most common cause
+   of "it doesn't work from my laptop but works fine on the server."
+2. Use the server's real hostname or IP everywhere instead:
+   - Browser address bar: `http://app01.lab.local:8080`
+   - Settings → Connection → API base URL: `http://app01.lab.local:8780`
+3. **Firewall**: `Install-DSMT.ps1` already opens inbound rules for both ports
+   (`DSMT Console <port>`, `DSMT API <port>`) via `New-NetFirewallRule`, but confirm
+   the rule's scope allows the client machine's subnet, not just local traffic.
+4. **DNS**: the client machine must be able to resolve the server's hostname. If your
+   internal DNS is inconsistent (see the `sql01` vs `sql01.lab.local` note above — the
+   same class of issue applies to the app server's own name), use the IP address
+   instead, or fix the DNS suffix search list on the client.
+5. `Api.CorsOrigins` in `config.json` defaults to `["*"]`, so it will not block a
+   remote browser. Restrict it to the exact console URL only once you've confirmed
+   remote access works, per the production checklist below.
+
+**Simpler alternative — single URL for everyone:** put IIS in front of the API as a
+reverse proxy (see `iis-reverse-proxy.web.config` at the project root, and the
+"Single-origin via IIS reverse proxy" section of `Deployment_Guide.html`). Every user,
+local or remote, then uses one URL (e.g. `https://dsmt.lab.local`) with no port and no
+separate API-URL field to configure — this avoids the `localhost` mistake entirely.
+
+---
+
 ## 7. What each screen calls
 | Screen | Endpoint |
 |--------|----------|

@@ -75,6 +75,10 @@ pick up immediately.
   live-editable settings - keep it that way to avoid two stores drifting.
 
 ## Recently completed (most recent first)
+- Added a "Remote access" section to README.md and Deployment_Guide.html
+  (accessing by server name / from another machine): the app already
+  listens on all interfaces, the fix is entirely about using the right
+  URL/firewall/DNS on the client side, not localhost. Docs-only.
 - 3.29.20: Found and fixed what is very likely the actual root cause of the
   browser setup wizard never completing across this entire session's
   testing. POST /api/setup/save read/wrote $Config as a bare variable
