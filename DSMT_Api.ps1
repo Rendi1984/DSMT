@@ -16,7 +16,7 @@
     GET  /api/contractor/:user  -> placement verdict
     GET  /api/audit?kind=
     GET  /api/ca/certs | /api/ca/pending
-    POST /api/ca/publish-crl | /api/ca/revoke | /api/ca/approve/:id | /api/ca/deny/:id
+    POST /api/ca/publish-crl | /api/ca/revoke | /api/ca/approve {id} | /api/ca/deny {id}
 #>
 
 $ErrorActionPreference = 'Stop'
