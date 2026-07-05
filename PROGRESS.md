@@ -7,9 +7,18 @@ useful context under "Notes" so a fresh session (with no chat history) can
 pick up immediately.
 
 ## Current version
-3.29.22 (API + Console) — see `CHANGELOG.md` for the authoritative log.
+3.29.24 (API + Console) — see `CHANGELOG.md` for the authoritative log.
 
 ## Open tasks
+- DL Groups "Generate" and "Create user" — no code bug found across 2
+  Explore-agent passes (client/route/module all wired correctly for both).
+  3.29.24 fixed the silent-failure pattern that was likely hiding the real
+  cause (list loaders now reset state + show the real error on failure) —
+  needs a live re-test to see the actual error message and root-cause it.
+- The "what does Audit Log do" question from the user has not been answered
+  yet — next session should explain the feature (reads `dbo.AuditLog`,
+  logs user/CA/setting-change actions via `Write-Audit`, filterable by
+  action/actor/date in the System Team workspace) directly to the user.
 - CONFIRMED END TO END: the full install -> setup wizard -> sign-in chain
   now works. User granted the NT AUTHORITY\SYSTEM SQL login sysadmin (fixed
   the loopback permission issue) and successfully signed in as the local
@@ -75,6 +84,45 @@ pick up immediately.
   live-editable settings - keep it that way to avoid two stores drifting.
 
 ## Recently completed (most recent first)
+- 3.29.24: A full live-console pass by the user turned up 10 issues in one
+  message; root-caused and fixed 8 of them:
+  (1) General/Backup tabs showed a stale/wrong LDAP server forever - no
+  `loadConfigLive()` existed, and separately `GET`/`POST /api/config` read
+  and wrote two different stores (SQL table vs config.json) - fixed both
+  sides so they're symmetric and the console reloads config after sign-in
+  and when opening General.
+  (2) Database tab's "Backup now" did nothing - `apiFetch` always sent
+  `Content-Type: application/json` even with no body, which Pode's parser
+  rejected before the route ran; now only sent when there's an actual body.
+  (3) Access & Permissions UX, per the user's explicit choices: group-mapping
+  "add new" row is now free-text LDAP group name (role stays a dropdown);
+  "Local accounts" card moved directly under "Group -> role mapping".
+  (4) Event Viewer returned nothing for any target, including the API's own
+  host - `Get-RemoteEvents` always forced RPC remoting via `-ComputerName`,
+  which needs a firewall rule not open even for local self-queries. Added
+  `Test-IsLocalMachine` and skip `-ComputerName` for local targets.
+  (5) Diagnostics DC health check showed almost everything unreachable -
+  `Test-DcServices` had a sticky flag that marked every remaining service on
+  a host "unknown" after the first probe failure; now each service is
+  probed independently, same local-machine RPC-avoidance fix applied.
+  (6) Alerts can now deep-link to the relevant Settings tab (new feature,
+  user request) - e.g. clicking the setup-pending alert jumps to Access &
+  Permissions.
+  (7) The console is now responsive (new feature, user request) - below
+  ~860px the sidebar collapses behind a hamburger button in the header,
+  overlays with a backdrop when opened, auto-closes on nav-click or on
+  resizing back to a wide window.
+  (8) `*Live` list loaders (e.g. `loadUsersLive`) no longer leave stale/
+  undefined state on a failed fetch - reset to `[]` and show the real error,
+  likely the source of the recurring `[dc-runtime] {{ }} never resolved`
+  console warnings.
+  Also, per the user's explicit request: Uninstall now removes everything
+  (service, install folder, IIS site + webroot, firewall rules) by default;
+  added `-LeaveIIS` as the new opt-out switch (logs/database still kept by
+  default via existing `-RemoveLogs`/`-RemoveDatabase`).
+  Two items (DL Groups Generate, Create user) had no code bug found in
+  either session's Explore-agent pass - moved to Open tasks for live re-test
+  now that the real error will surface instead of failing silently.
 - 3.29.22: Fixed Settings -> General/Database/CA "Save changes" returning
   400 every time - Save-Config's -Path parameter defaulted to the bare
   $cfgPath script variable, invisible inside a Pode route's own runspace

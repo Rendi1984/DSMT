@@ -1,17 +1,17 @@
 <#
   Uninstall-DSMT.ps1 - removes the Directory Services Management Tool.
 
-  It stops AND deletes the DSMT-Api Windows service (deleting is required so the
-  service .exe is released and the install folder can be removed), then deletes
-  the install folder. Optionally removes the IIS site + webroot, the firewall
-  rules, and (only with -RemoveDatabase) drops the SQL database.
+  By DEFAULT this is a full clean removal: the DSMT-Api Windows service, the
+  install folder, the IIS site + webroot, and the DSMT firewall rules are all
+  removed. Only the logs folder and the SQL database are kept by default
+  (pass -RemoveLogs / -RemoveDatabase to also remove those).
 
   Double-click Uninstall.cmd (self-elevates via UAC), or run:
       .\Uninstall-DSMT.ps1
   No prompts (unattended):
       .\Uninstall-DSMT.ps1 -Yes
-  Full cleanup incl. IIS + firewall (keeps the SQL database):
-      .\Uninstall-DSMT.ps1 -RemoveIisSite -RemoveFirewall -Yes
+  Keep the IIS site + webroot + firewall rules for a fast reinstall:
+      .\Uninstall-DSMT.ps1 -LeaveIIS -Yes
 
   COMPATIBILITY: Windows PowerShell 5.1 (no ternary / ?? / && ; ASCII only).
 #>
@@ -23,8 +23,7 @@ param(
     [string] $WebRoot      = "C:\inetpub\dsmt",
     [int]    $ApiPort      = 8780,
     [int]    $FrontendPort = 8080,
-    [switch] $RemoveIisSite,    # also remove the IIS site + webroot
-    [switch] $RemoveFirewall,   # also remove the DSMT firewall rules
+    [switch] $LeaveIIS,         # skip removing the IIS site + webroot + firewall rules (kept by default for a fast reinstall)
     [switch] $RemoveDatabase,   # also DROP the SQL database (prompts for server/name)
     [switch] $RemoveLogs,       # also delete <InstallDir>\logs (default: the logs folder is KEPT)
     [switch] $Yes               # skip the confirmation prompt
@@ -56,8 +55,9 @@ Write-Host "Directory Services Management Tool - uninstaller" -ForegroundColor W
 Write-Host "------------------------------------------------" -ForegroundColor DarkGray
 Write-Host ("Service : {0}" -f $ServiceName)
 Write-Host ("Folder  : {0}" -f $InstallDir)
-if ($RemoveIisSite)  { Write-Host ("IIS site: {0}  (+ {1})" -f $SiteName, $WebRoot) }
-if ($RemoveFirewall) { Write-Host ("Firewall: DSMT API {0}, DSMT Console {1}" -f $ApiPort, $FrontendPort) }
+if (-not $LeaveIIS) { Write-Host ("IIS site: {0}  (+ {1})" -f $SiteName, $WebRoot) }
+if (-not $LeaveIIS) { Write-Host ("Firewall: DSMT API {0}, DSMT Console {1}" -f $ApiPort, $FrontendPort) }
+if ($LeaveIIS)      { Write-Host "IIS site + webroot + firewall rules: KEPT (-LeaveIIS)" -ForegroundColor Yellow }
 if ($RemoveDatabase) { Write-Host "Database: WILL BE DROPPED (you will be asked for the server/name)" -ForegroundColor Red }
 else                 { Write-Host "Database: left intact (use -RemoveDatabase to drop it)" }
 
@@ -81,8 +81,8 @@ if ($svc) {
 Get-CimInstance Win32_Process -Filter "Name='DSMT-Api-Service.exe'" -ErrorAction SilentlyContinue |
     ForEach-Object { try { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue } catch {} }
 
-# --- 2) Optional: IIS site + webroot ---------------------------------------
-if ($RemoveIisSite) {
+# --- 2) IIS site + webroot (removed by default; pass -LeaveIIS to keep) ----
+if (-not $LeaveIIS) {
     Step "Remove IIS site '$SiteName' + webroot"
     try {
         Import-Module WebAdministration -ErrorAction Stop
@@ -95,8 +95,8 @@ if ($RemoveIisSite) {
     }
 }
 
-# --- 3) Optional: firewall rules -------------------------------------------
-if ($RemoveFirewall) {
+# --- 3) Firewall rules (removed by default; pass -LeaveIIS to keep) --------
+if (-not $LeaveIIS) {
     Step "Remove firewall rules"
     foreach ($n in @("DSMT API $ApiPort", "DSMT Console $FrontendPort")) {
         try { Get-NetFirewallRule -DisplayName $n -ErrorAction SilentlyContinue | Remove-NetFirewallRule -ErrorAction SilentlyContinue; Ok "Removed rule: $n" }

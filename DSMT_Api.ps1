@@ -279,8 +279,31 @@ WHEN NOT MATCHED THEN INSERT(Username,ConsoleRole,PwHash,PwSalt,Iterations,Enabl
     }
 
     Add-PodeRoute -Method Get -Path '/api/config' -ScriptBlock {
+        # NOTE: this used to call the module's Get-Config (no args), which
+        # returns the flat key/value dbo.Config SQL table - an entirely
+        # different store than what POST /api/config writes into
+        # ($Config.Directory / .Sync, i.e. config.json). The console's
+        # General/Backup tabs never got the real LDAP/DC value back because
+        # of this read/write mismatch - build the response from the same
+        # sources POST writes to, mirroring buildConfig()'s shape client-side
+        # so the console's existing import-config field mapping can be reused.
         if (-not (Get-Session $WebEvent)) { Write-401; return }
-        Write-PodeJsonResponse -Value (Get-Config)
+        $cfg = $using:Config
+        $sql = Get-Config
+        Write-PodeJsonResponse -Value @{
+            directory = @{
+                ldapServer   = $cfg.Directory.LdapServer
+                baseDN       = $cfg.Directory.BaseDN
+                requireGroup = ($sql['RequireSecurityGroup'] -eq 'true')
+                accessGroup  = $sql['AccessSecurityGroup']
+            }
+            domains         = @($cfg.Directory.Domains)
+            contractorOUs   = @{
+                admin   = $sql['ContractorExpectedAdminOU']
+                support = $sql['ContractorExpectedSupportOU']
+            }
+            adConnectServer = $cfg.Sync.ADConnectServer
+        }
     }
 
     # ---------- DATABASE SETUP (GUI) ----------
@@ -719,6 +742,13 @@ WHEN NOT MATCHED THEN INSERT(Username,ConsoleRole,PwHash,PwSalt,Iterations,Enabl
 
     # ---------- CONFIG SAVE (from console Settings tabs) ----------
     Add-PodeRoute -Method Post -Path '/api/config' -ScriptBlock {
+        # Persists into the SAME two stores GET /api/config now reads from:
+        # LdapServer/BaseDN/Domains/ADConnectServer go to config.json
+        # ($Config, via Save-Config); requireGroup/accessGroup/contractorOUs
+        # go to the SQL dbo.Config table (via Set-Config), matching how
+        # Access Control's own toggles already persist those same keys.
+        # Previously this route silently dropped domains/contractorOUs even
+        # though the console's saveConfigLive() always sent them.
         $s = Get-Session $WebEvent; if (-not $s) { Write-401; return }
         $d = $WebEvent.Data
         $cfg = $using:Config
@@ -726,7 +756,16 @@ WHEN NOT MATCHED THEN INSERT(Username,ConsoleRole,PwHash,PwSalt,Iterations,Enabl
             if ($d.directory.ldapServer) { $cfg.Directory.LdapServer = $d.directory.ldapServer }
             if ($d.directory.baseDN)     { $cfg.Directory.BaseDN     = $d.directory.baseDN }
         }
-        try { Save-Config -Cfg $cfg -Path $using:cfgPath; Write-PodeJsonResponse -Value @{ ok=$true } }
+        if ($d.domains) { $cfg.Directory.Domains = @($d.domains) }
+        if ($d.adConnectServer) { $cfg.Sync.ADConnectServer = $d.adConnectServer }
+        try {
+            Save-Config -Cfg $cfg -Path $using:cfgPath
+            if ($d.contractorOUs) {
+                if ($d.contractorOUs.admin)   { Set-Config -Key 'ContractorExpectedAdminOU'   -Value $d.contractorOUs.admin   -By $s.username }
+                if ($d.contractorOUs.support) { Set-Config -Key 'ContractorExpectedSupportOU' -Value $d.contractorOUs.support -By $s.username }
+            }
+            Write-PodeJsonResponse -Value @{ ok=$true }
+        }
         catch { Set-PodeResponseStatus -Code 400; Write-PodeJsonResponse -Value @{ ok=$false; error=$_.Exception.Message } }
     }
     Add-PodeRoute -Method Post -Path '/api/ca/config' -ScriptBlock {

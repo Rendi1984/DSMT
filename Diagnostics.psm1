@@ -10,6 +10,25 @@
   a hint - probing still proceeds when ping is blocked.
 #>
 
+function Test-IsLocalMachine {
+    <# True when $Name refers to the machine this code is running on (short
+       name or FQDN, case-insensitive). Get-Service/Get-WinEvent -ComputerName
+       always force the legacy RPC remoting path, which requires the
+       'Remote Service Management' / 'Remote Event Log Management' firewall
+       rule groups even when the "remote" target is the local host itself -
+       those rules are usually not open for a pure self-query. Skipping
+       -ComputerName entirely for a local target avoids RPC altogether. #>
+    param([string] $Name)
+    if ([string]::IsNullOrWhiteSpace($Name)) { return $false }
+    $short = $Name.Split('.')[0]
+    if ($short -ieq $env:COMPUTERNAME) { return $true }
+    try {
+        $fqdn = [System.Net.Dns]::GetHostEntry('').HostName
+        if ($Name -ieq $fqdn -or $short -ieq $fqdn.Split('.')[0]) { return $true }
+    } catch {}
+    return $false
+}
+
 function Get-DomainControllers {
     <#
       Discovers DCs three ways (first that works wins):
@@ -42,25 +61,28 @@ $script:DcServices = 'NTDS','DNS','Netlogon','KDC','W32Time','DFSR','ADWS'
 function Test-DcServices {
     <# Probes the standard DC services on each host. Ping is only a hint: when
        ICMP is blocked the RPC service query is attempted anyway, and the host
-       counts as reachable if any service answers. If the host looks truly dead
-       (ping fails AND the Service Control Manager cannot be opened), remaining
-       probes are skipped to avoid stacking RPC timeouts. #>
+       counts as reachable if any service answers. Each service is probed
+       independently - a previous version short-circuited the rest of a host's
+       services after the FIRST SCM-open failure (e.g. a firewall/RPC issue),
+       which falsely marked every other service 'unknown' even when they were
+       genuinely reachable. Also skips the RPC-forcing -ComputerName parameter
+       entirely when the target is the machine this code is running on. #>
     param([string[]] $Hosts, [string[]] $Services = $script:DcServices)
     $out = @()
     foreach ($h in $Hosts) {
         $svcResults = @()
         $ping = Test-Connection -ComputerName $h -Count 1 -Quiet -ErrorAction SilentlyContinue
         $answered = $false
-        $scmDown  = $false
+        $isLocal = Test-IsLocalMachine -Name $h
         foreach ($s in $Services) {
             $state = 'unknown'
-            if (-not $scmDown) {
-                try { $state = (Get-Service -ComputerName $h -Name $s -ErrorAction Stop).Status.ToString(); $answered = $true }
-                catch {
-                    if ($_.Exception -is [Microsoft.PowerShell.Commands.ServiceCommandException]) { $state = 'missing'; $answered = $true }
-                    elseif ($ping) { $state = 'missing' }
-                    else { $scmDown = $true }
-                }
+            try {
+                $svc = if ($isLocal) { Get-Service -Name $s -ErrorAction Stop } else { Get-Service -ComputerName $h -Name $s -ErrorAction Stop }
+                $state = $svc.Status.ToString(); $answered = $true
+            }
+            catch {
+                if ($_.Exception -is [Microsoft.PowerShell.Commands.ServiceCommandException]) { $state = 'missing'; $answered = $true }
+                elseif ($ping) { $state = 'missing' }
             }
             $svcResults += [pscustomobject]@{ name = $s; status = $state }
         }
@@ -154,7 +176,11 @@ function Get-RemoteEvents {
     <# Reads a remote Windows server's event log via Get-WinEvent -ComputerName -
        the same RPC channel the graphical Event Viewer uses, so no RDP session is
        needed. Target requires the 'Remote Event Log Management' firewall rules
-       and the caller needs Event Log Readers (or admin) rights on it. #>
+       and the caller needs Event Log Readers (or admin) rights on it.
+       -ComputerName always forces that RPC path even when $Server is the
+       machine this code runs on, where the firewall rule is usually not
+       open for a pure self-query - skip it entirely for a local target so
+       "Event Viewer -> this server" works without any RPC firewall rule. #>
     param(
         [Parameter(Mandatory)][string] $Server,
         [string] $LogName = 'System',
@@ -165,7 +191,11 @@ function Get-RemoteEvents {
     )
     $filter = @{ LogName = $LogName; StartTime = (Get-Date).AddHours(-1 * $Hours) }
     if ($Levels -and $Levels.Count -gt 0) { $filter['Level'] = $Levels }
-    $events = @(Get-WinEvent -ComputerName $Server -FilterHashtable $filter -MaxEvents $Top -ErrorAction Stop)
+    if (Test-IsLocalMachine -Name $Server) {
+        $events = @(Get-WinEvent -FilterHashtable $filter -MaxEvents $Top -ErrorAction Stop)
+    } else {
+        $events = @(Get-WinEvent -ComputerName $Server -FilterHashtable $filter -MaxEvents $Top -ErrorAction Stop)
+    }
     $rows = $events | ForEach-Object {
         $msg = [string]$_.Message
         if ($msg.Length -gt 400) { $msg = $msg.Substring(0, 400) + '...' }

@@ -192,7 +192,7 @@
       <div class="brand-mark">DS</div>
       <div class="brand-name">DSMT</div>
     </div>
-    <div class="brand-sub">Deployment &amp; Reference · v3.29.22</div>
+    <div class="brand-sub">Deployment &amp; Reference · v3.29.24</div>
 
     <div class="toc-group">
       <div class="toc-group-label">Start here</div>
@@ -747,6 +747,11 @@ notepad config.json</pre><p>Set <strong>Database</strong>, <strong>Directory</st
             <tr><td><code>dsmt-error.log</code> / <code>dsmt-sql.log</code> shows <code>Login failed for user 'NT AUTHORITY\SYSTEM'</code>, e.g. on sign-in (<code>HTTP 500</code>) or any SQL-backed action</td><td>SQL Server and the API are on the <em>same</em> machine, using Windows Integrated auth - a same-machine ("loopback") SSPI connection always presents as <code>NT AUTHORITY\SYSTEM</code> to SQL Server, not the service account or computer account you'd expect</td><td>Not a code bug - see the callout under <a href="#permissions">Permissions</a> for the exact SQL commands (grant that login, or switch to SQL Server authentication)</td></tr>
             <tr><td>An unrelated action (sign-in, a user action, a CA action, ...) fails with a raw, unhelpful <code>HTTP 500</code> whenever SQL is briefly unreachable</td><td><code>Write-Audit</code> (called fire-and-forget by nearly every route) had no error handling - any SQL hiccup while writing the audit log crashed the calling route too</td><td>Fixed in 3.29.21 - audit-log failures are now caught and logged to <code>dsmt-sql.log</code> instead of breaking the request; the session-creation step of sign-in is also now wrapped, returning a readable <code>502</code> instead of an empty <code>500</code></td></tr>
             <tr><td>Settings -> General/Database/Certificate Authority "Save changes" returns <code>400 Bad Request</code> every time</td><td><code>Save-Config</code>'s file-path parameter defaulted to the bare <code>$cfgPath</code> script variable - invisible inside a Pode route's own runspace, same class of bug as the 3.29.20 <code>/api/setup/save</code> fix - so <code>Set-Content</code> threw on every call</td><td>Fixed in 3.29.22 - all 4 call sites now pass <code>-Path $using:cfgPath</code> explicitly</td></tr>
+            <tr><td>Settings -> General/Backup keep showing the wrong or a stale LDAP server / base DN, even right after signing in</td><td>The console never reloaded <code>/api/config</code> after sign-in, and separately, <code>GET</code>/<code>POST /api/config</code> read and wrote two different stores (SQL table vs <code>config.json</code>) so even a manual reload could show incomplete data</td><td>Fixed in 3.29.24 - both routes now read/write the same fields symmetrically, and the console reloads them right after sign-in and whenever you open the General tab</td></tr>
+            <tr><td>Database tab's <strong>Backup now</strong> button does nothing / fails silently</td><td><code>apiFetch</code> always sent <code>Content-Type: application/json</code> even on bodyless POST calls, which Pode's body parser rejected before the route ever ran</td><td>Fixed in 3.29.24 - the header is only sent when the request actually has a body</td></tr>
+            <tr><td>Event Viewer returns no results for any server, including the API's own host</td><td><code>Get-RemoteEvents</code> always used <code>Get-WinEvent -ComputerName</code>, forcing legacy RPC remoting and the "Remote Event Log Management" firewall rule even for a local self-query</td><td>Fixed in 3.29.24 - a local target now queries in-process, no RPC or firewall rule needed</td></tr>
+            <tr><td>Diagnostics -> Domain Controllers shows almost every service amber/unreachable, even ones that are actually running</td><td><code>Test-DcServices</code> set a sticky flag on the first service-probe failure for a host and then marked every remaining service on that host "unknown" regardless of its real state</td><td>Fixed in 3.29.24 - each service is probed independently; also applies the same local-machine RPC-avoidance fix as Event Viewer to <code>Get-Service</code></td></tr>
+            <tr><td>DL Groups "Generate" or "Create user" fails with no useful message</td><td>No code-level bug found in either path as of 3.29.24 - the underlying cause (likely AD permissions or a name/OU mismatch) was previously hidden by silent failures</td><td>3.29.24 makes list-loader failures surface the real error message instead of failing silently - re-test and check the surfaced error / <code>dsmt-error.log</code></td></tr>
           </tbody>
         </table>
       </div>
@@ -773,21 +778,20 @@ notepad config.json</pre><p>Set <strong>Database</strong>, <strong>Directory</st
     <section id="uninstall">
       <h2>Uninstall</h2>
       <pre class="code">.\Uninstall-DSMT.ps1 -Yes</pre>
-      <p>Stops and removes the <code>DSMT-Api</code> service, deletes the install folder, and removes the <code>HKLM:\SOFTWARE\DSMT</code> registry key. <strong>Logs are kept by default</strong> (<code>&lt;InstallDir&gt;\logs</code>) so a failed install can still be diagnosed afterward — pass <code>-RemoveLogs</code> to delete those too. The IIS site, firewall rules and SQL database are all left in place unless explicitly requested:</p>
+      <p>By default this is a <strong>full clean removal</strong>: stops and removes the <code>DSMT-Api</code> service, deletes the install folder, removes the <code>HKLM:\SOFTWARE\DSMT</code> registry key, and removes the IIS site + webroot (<code>C:\inetpub\dsmt</code>) and the DSMT firewall rules. Only <strong>logs</strong> (<code>&lt;InstallDir&gt;\logs</code>, so a failed install can still be diagnosed afterward) and the <strong>SQL database</strong> are kept by default:</p>
       <div class="tbl-wrap">
         <table>
           <thead><tr><th>Switch</th><th>Effect</th></tr></thead>
           <tbody>
-            <tr><td><code>-RemoveIisSite</code></td><td>Also removes the IIS site and its webroot (<code>C:\inetpub\dsmt</code> by default)</td></tr>
-            <tr><td><code>-RemoveFirewall</code></td><td>Also removes the DSMT API/Console firewall rules</td></tr>
+            <tr><td><code>-LeaveIIS</code></td><td>Keeps the IIS site + webroot and the DSMT firewall rules instead of removing them (useful before a fast reinstall)</td></tr>
             <tr><td><code>-RemoveDatabase</code></td><td>Prompts for the SQL server/database, then <strong>permanently drops it</strong> — requires retyping the database name to confirm, even with <code>-Yes</code></td></tr>
             <tr><td><code>-RemoveLogs</code></td><td>Deletes <code>&lt;InstallDir&gt;\logs</code> too (kept by default)</td></tr>
             <tr><td><code>-Yes</code></td><td>Skips the confirmation prompt (unattended)</td></tr>
           </tbody>
         </table>
       </div>
-      <p>Full cleanup before a fresh reinstall, keeping the database and logs:</p>
-      <pre class="code">.\Uninstall-DSMT.ps1 -RemoveIisSite -RemoveFirewall -Yes</pre>
+      <p>Uninstall but keep IIS in place for a fast reinstall:</p>
+      <pre class="code">.\Uninstall-DSMT.ps1 -LeaveIIS -Yes</pre>
     </section>
 
     <section id="layout">
@@ -822,7 +826,7 @@ notepad config.json</pre><p>Set <strong>Database</strong>, <strong>Directory</st
 
     <div class="callout note" style="margin-top:60px;">
       <div class="dot"></div>
-      <p><strong>Version</strong> This guide describes DSMT 3.29.22. See <code>CHANGELOG.md</code> for the full release history.</p>
+      <p><strong>Version</strong> This guide describes DSMT 3.29.24. See <code>CHANGELOG.md</code> for the full release history.</p>
     </div>
   </main>
 </div>
