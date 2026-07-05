@@ -163,24 +163,32 @@ Start-PodeServer {
     }
     # Persist the SQL connection to config.json and switch the API into normal mode.
     Add-PodeRoute -Method Post -Path '/api/setup/save' -ScriptBlock {
-        if (Test-SetupComplete) { Set-PodeResponseStatus -Code 409; Write-PodeJsonResponse -Value @{ error = 'Setup already complete.' }; return }
+        # This route runs in its own Pode runspace - $Config is NOT visible
+        # here as a bare variable (unlike the main script scope). Every other
+        # route captures it via $using:Config first; this one used to write
+        # straight to $Config.Database.* without that capture, which silently
+        # operated on $null and crashed before ever reaching Save-Config -
+        # so /api/setup/save never actually persisted anything or returned a
+        # usable response, no matter how many times the wizard was retried.
+        $cfg = $using:Config
+        if (Test-SetupComplete -Cfg $cfg) { Set-PodeResponseStatus -Code 409; Write-PodeJsonResponse -Value @{ error = 'Setup already complete.' }; return }
         $d = $WebEvent.Data
-        $Config.Database.Engine                 = $d.Engine
-        $Config.Database.Server                 = $d.Server
-        $Config.Database.Port                   = [int]$d.Port
-        $Config.Database.Name                   = $d.Name
-        $Config.Database.Auth                   = $d.Auth
-        $Config.Database.User                   = $d.User
-        $Config.Database.Password               = $d.Password
-        $Config.Database.Encrypt                = [bool]$d.Encrypt
-        $Config.Database.TrustServerCertificate = [bool]$d.TrustServerCertificate
+        $cfg.Database.Engine                 = $d.Engine
+        $cfg.Database.Server                 = $d.Server
+        $cfg.Database.Port                   = [int]$d.Port
+        $cfg.Database.Name                   = $d.Name
+        $cfg.Database.Auth                   = $d.Auth
+        $cfg.Database.User                   = $d.User
+        $cfg.Database.Password               = $d.Password
+        $cfg.Database.Encrypt                = [bool]$d.Encrypt
+        $cfg.Database.TrustServerCertificate = [bool]$d.TrustServerCertificate
         # Optional: the browser wizard also sends the directory settings.
-        if ($d.Directory -and $Config.Directory) {
-            if ($d.Directory.LdapServer) { $Config.Directory.LdapServer = $d.Directory.LdapServer }
-            if ($d.Directory.BaseDN)     { $Config.Directory.BaseDN     = $d.Directory.BaseDN }
+        if ($d.Directory -and $cfg.Directory) {
+            if ($d.Directory.LdapServer) { $cfg.Directory.LdapServer = $d.Directory.LdapServer }
+            if ($d.Directory.BaseDN)     { $cfg.Directory.BaseDN     = $d.Directory.BaseDN }
         }
-        Save-Config
-        try { Initialize-Db -DbConfig $Config.Database -ProbeOnly; Initialize-Db -DbConfig $Config.Database }
+        Save-Config -Cfg $cfg
+        try { Initialize-Db -DbConfig $cfg.Database -ProbeOnly; Initialize-Db -DbConfig $cfg.Database }
         catch { Write-PodeJsonResponse -Value @{ ok = $false; error = $_.Exception.Message }; return }
         # Optional: seed the break-glass local administrator collected by the wizard.
         if ($d.LocalAdmin -and $d.LocalAdmin.User -and $d.LocalAdmin.Password) {
