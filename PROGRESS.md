@@ -7,17 +7,20 @@ useful context under "Notes" so a fresh session (with no chat history) can
 pick up immediately.
 
 ## Current version
-3.29.19 (API + Console) — see `CHANGELOG.md` for the authoritative log.
+3.29.20 (API + Console) — see `CHANGELOG.md` for the authoritative log.
 
 ## Open tasks
 - Waiting on user confirmation that a fresh `-SetupViaBrowser` install now
-  fully works end-to-end. Found and fixed 7 blocking bugs across 3.29.13-
-  3.29.18 (API crash-loop, duplicate CORS header on 401s, Start-Website
+  fully works end-to-end. Found and fixed 8 blocking bugs across 3.29.13-
+  3.29.20 (API crash-loop, duplicate CORS header on 401s, Start-Website
   COMException in the installer, "First run" local-admin button never
   actually authenticating in Live mode, unhandled exception in
-  `/api/auth/login` returning an empty 500, and a client-side re-entrancy
-  race in the setup wizard's Install button) - not yet confirmed clean in
-  the user's lab.
+  `/api/auth/login` returning an empty 500, a client-side re-entrancy race
+  in the setup wizard's Install button, sign-in HTTP 500 from untyped SQL
+  params, and finally `/api/setup/save` using a bare `$Config` reference
+  that was always `$null` in its route runspace) - 3.29.20 is the strongest
+  candidate yet for the actual root cause of "Install never finishes," but
+  still not yet confirmed clean end-to-end in the user's lab.
 - Diagnostic method worth remembering: when the user reports "button does
   nothing," ask for BOTH `dsmt-service.log` (server-side process log) AND
   `dsmt-request.log` (every HTTP request Pode received) - cross-referencing
@@ -72,6 +75,18 @@ pick up immediately.
   live-editable settings - keep it that way to avoid two stores drifting.
 
 ## Recently completed (most recent first)
+- 3.29.20: Found and fixed what is very likely the actual root cause of the
+  browser setup wizard never completing across this entire session's
+  testing. POST /api/setup/save read/wrote $Config as a bare variable
+  instead of via $using:Config (every other route captures it that way -
+  this project has hit this exact class of bug repeatedly: 3.29.13, 3.29.15,
+  3.29.18). $Config was silently $null inside that route's runspace, so the
+  property writes either no-op'd or threw before Save-Config was ever
+  reached - meaning /api/setup/save could never persist the SQL connection
+  or seed the local admin, no matter how many times "Install" was retried,
+  regardless of file:// vs proper http:// origin. Fixed by capturing
+  $using:Config into a local $cfg and passing it explicitly to
+  Test-SetupComplete and Save-Config (both already accept -Cfg).
 - Added `iis-reverse-proxy.web.config` (optional) + a guide section for the
   single-origin IIS reverse-proxy deployment the console already advertises
   ("Behind IIS reverse proxy"). Key gotcha documented: never add IIS CORS

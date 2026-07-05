@@ -192,7 +192,7 @@
       <div class="brand-mark">DS</div>
       <div class="brand-name">DSMT</div>
     </div>
-    <div class="brand-sub">Deployment &amp; Reference · v3.29.19</div>
+    <div class="brand-sub">Deployment &amp; Reference · v3.29.20</div>
 
     <div class="toc-group">
       <div class="toc-group-label">Start here</div>
@@ -702,6 +702,7 @@ notepad config.json</pre><p>Set <strong>Database</strong>, <strong>Directory</st
             <tr><td>Setup wizard's <strong>Install</strong> button appears to do nothing, and the server's <code>dsmt-request.log</code> shows endless repeating <code>/api/setup/test-server</code> / <code>/api/setup/create-db</code> pairs but <code>/api/setup/save</code> is never reached</td><td>A client-side re-entrancy race in <code>index.html</code> - the button's busy-guard read an asynchronous state flag, so more than one click before that flag committed launched overlapping, self-clobbering install attempts</td><td>Fixed in 3.29.17 - the guard is now a synchronous flag set the instant the button is pressed</td></tr>
             <tr><td>Sign-in authenticates but returns <code>HTTP 500</code>; <code>dsmt-error.log</code> shows <code>Argument data type nvarchar(max) is invalid for argument 2 of dateadd</code></td><td>The SQL helper bound every parameter as <code>NVarChar(max)</code>, which typed T-SQL function arguments like <code>DATEADD(hour, @h, ...)</code> reject - so creating the session row failed after a successful password check</td><td>Fixed in 3.29.18 (type-aware parameter binding in <code>Db.psm1</code>)</td></tr>
             <tr><td>Browser console shows a 404 for <code>.image-slots.state.json</code> and/or <code>favicon.ico</code> on every console load</td><td>Harmless design-tool leftovers - the logo image-slot always fetched a sidecar state file that never exists on a server, and the page had no favicon</td><td>Fixed in 3.29.18 - the sidecar fetch is skipped outside the design tool and a small inline favicon was embedded</td></tr>
+            <tr><td>Setup wizard's <strong>test-server</strong> and <strong>create-db</strong> steps succeed every time, but <strong>Install never finishes</strong> and <code>/api/setup/save</code> never appears with any status in <code>dsmt-request.log</code> (even after 3.29.17's re-entrancy fix, over a proper <code>http://</code> URL)</td><td><code>POST /api/setup/save</code> read and wrote <code>$Config</code> as a bare variable instead of capturing it via <code>$using:Config</code> like every other route - Pode route scriptblocks run in their own runspace, so <code>$Config</code> was silently <code>$null</code> there and the route never reached <code>Save-Config</code></td><td>Fixed in 3.29.20 - the route now captures <code>$using:Config</code> correctly, same pattern as every other route</td></tr>
           </tbody>
         </table>
       </div>
@@ -777,7 +778,7 @@ notepad config.json</pre><p>Set <strong>Database</strong>, <strong>Directory</st
 
     <div class="callout note" style="margin-top:60px;">
       <div class="dot"></div>
-      <p><strong>Version</strong> This guide describes DSMT 3.29.19. See <code>CHANGELOG.md</code> for the full release history.</p>
+      <p><strong>Version</strong> This guide describes DSMT 3.29.20. See <code>CHANGELOG.md</code> for the full release history.</p>
     </div>
   </main>
 </div>
