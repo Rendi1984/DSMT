@@ -7,7 +7,7 @@ useful context under "Notes" so a fresh session (with no chat history) can
 pick up immediately.
 
 ## Current version
-3.32.0 (API + Console) — see `CHANGELOG.md` for the authoritative log.
+3.32.2 (API + Console) — see `CHANGELOG.md` for the authoritative log.
 
 ## Open tasks
 - CONFIRMED END TO END: the full install -> setup wizard -> sign-in chain
@@ -88,6 +88,33 @@ pick up immediately.
   live-editable settings - keep it that way to avoid two stores drifting.
 
 ## Recently completed (most recent first)
+- 3.32.2: Batch of fixes from user testing 3.32.0 live: (1) local account
+  creation used window.prompt() for the password AFTER clicking Create,
+  whose message echoed the username - user read it as "asks for username,
+  no password field" - replaced with a real inline password field. (2)
+  "Sign-in groups & roles" group field was a fixed dropdown of hardcoded
+  demo group names with no way to enter a real AD group - now free text
+  (sAMAccountName or full DN). (3) DL Groups showed correct member count
+  but blank name/detail cells - Get-GroupMembers had no fallback when AD's
+  DisplayName is blank (common on lab accounts/nested group members); now
+  falls back to sAMAccountName. Confirmed this via code trace (dlRows
+  mapping in index.html is correct; the raw server data was the gap) -
+  NOT independently verified against the user's live AD, worth confirming
+  next session that names now show. (4) Local account toggle route had no
+  try/catch - a bad ID or transient SQL hiccup surfaced as a bare 500 the
+  console could only describe as "Failed to fetch"; now returns a readable
+  error. (5) Clarified (did not change) that Database tab's two Test
+  buttons check different things (form values vs. what's saved) - added a
+  caption, since the user suspected one was redundant.
+  Still open / not addressed this round: user also reported a stray
+  "Sign-in groups & roles" table row with a blank group name that Add
+  mapping didn't seem to add to; the free-text field change may resolve
+  usability here but the specific blank row is very likely a leftover SQL
+  row from earlier testing this session (before POST /api/access/mappings'
+  existing group/role required-field validation) - tell the user to remove
+  it via the row's x button; if Add mapping still silently fails to add a
+  NEW row after that, needs a live re-test with Network tab open on the
+  actual POST /api/access/mappings call to diagnose further.
 - 3.32.0: Redesigned Access & Permissions per direct user request ("I don't
   want both Access security group AND role mapping - one category for
   sign-in, define groups by LDAP, define their permissions there").

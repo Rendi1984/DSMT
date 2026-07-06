@@ -34,9 +34,13 @@ function Get-GroupMembers {
     Get-ADGroupMember -Identity $GroupName -Recursive |
         Get-ADObject -Properties DisplayName, mail, title, userAccountControl, objectClass, sAMAccountName |
         ForEach-Object {
+            # DisplayName is frequently blank on lab/test accounts (and on nested
+            # group members, which have no mail/title at all) - fall back to the
+            # sAMAccountName so the row still shows something identifying instead
+            # of a blank cell.
             [pscustomobject]@{
                 sam     = $_.sAMAccountName
-                name    = $_.DisplayName
+                name    = if ($_.DisplayName) { $_.DisplayName } else { $_.sAMAccountName }
                 email   = $_.mail
                 title   = $_.title
                 type    = if ($_.objectClass -eq 'group') { 'Group' } else { 'User' }
