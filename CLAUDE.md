@@ -85,6 +85,10 @@ finishing:
   `server/sql/`, including `Deployment_Guide.html`). Stage into a scratch
   folder, `zip -r` it, and send it via `SendUserFile` — don't just describe
   the changed files and expect the user to reassemble the package themselves.
+- **The ZIP filename MUST include the current version**, e.g.
+  `DSMT-Deploy-v3.29.26.zip` — never a bare `DSMT-Deploy.zip`. Use the
+  version being shipped in that same change (the one just bumped in
+  `index.html`/`CHANGELOG.md`), not a stale one.
 - **`Deployment_Guide.html` is a tracked, committed file** (root) — keep it in
   sync with every change that affects install steps, ports/firewall rules,
   permissions, troubleshooting symptoms, or the version number. Update it in
