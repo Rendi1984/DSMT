@@ -576,15 +576,6 @@ WHEN NOT MATCHED THEN INSERT(Username,ConsoleRole,PwHash,PwSalt,Iterations,Enabl
         Write-Audit -Actor $s.username -Action 'Local account removed' -Target $WebEvent.Parameters['id'] -Result 'Success' -Kind 'access'
         Write-PodeJsonResponse -Value @{ ok=$true }
     }
-    Add-PodeRoute -Method Post -Path '/api/access/require-group' -ScriptBlock {
-        $s = Get-Session $WebEvent; if (-not $s) { Write-401; return }
-        if ($null -ne $WebEvent.Data.enabled) {
-            Set-Config -Key 'RequireSecurityGroup' -Value $(if([bool]$WebEvent.Data.enabled){'true'}else{'false'}) -By $s.username
-        }
-        if ($WebEvent.Data.group) { Set-Config -Key 'AccessSecurityGroup' -Value ([string]$WebEvent.Data.group) -By $s.username }
-        Write-Audit -Actor $s.username -Action 'Sign-in policy updated' -Target 'access-control' -Result 'Success' -Kind 'access'
-        Write-PodeJsonResponse -Value @{ ok=$true }
-    }
 
     # ---------- SETTINGS BACKUP / RESTORE ----------
     Add-PodeRoute -Method Get -Path '/api/settings/export' -ScriptBlock {
