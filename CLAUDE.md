@@ -121,6 +121,7 @@ Bump version in ALL these places when changing index.html:
 3. About modal
 4. Installer-wizard label
 5. `buildConfig()` version field
+6. Sign-in screen, under the Demo/Live toggle (added 3.31.1)
 
 ---
 

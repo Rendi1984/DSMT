@@ -7,7 +7,7 @@ useful context under "Notes" so a fresh session (with no chat history) can
 pick up immediately.
 
 ## Current version
-3.31.0 (API + Console) — see `CHANGELOG.md` for the authoritative log.
+3.31.1 (API + Console) — see `CHANGELOG.md` for the authoritative log.
 
 ## Open tasks
 - CONFIRMED END TO END: the full install -> setup wizard -> sign-in chain
@@ -75,6 +75,11 @@ pick up immediately.
   live-editable settings - keep it that way to avoid two stores drifting.
 
 ## Recently completed (most recent first)
+- 3.31.1: Added the version number to the sign-in screen, under the Demo/Live
+  toggle (user request). Now a 6th place carries the version literal in
+  index.html - updated CLAUDE.md's bump checklist and the dsmt-dev-workflow
+  skill's "exactly N places" assertion from 5 to 6 so future sessions don't
+  under-count and leave this one stale.
 - 3.31.0: Added an LDAP "Test connection" button on Settings -> General (user
   request, same session as 3.30.0's responsive menu). New
   `POST /api/directory/test` route validates the LdapServer/BaseDN currently

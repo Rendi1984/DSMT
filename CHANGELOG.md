@@ -1,5 +1,9 @@
 # Changelog
 All notable changes to the Directory Services Management Tool.
+## 3.31.1
+**New feature**: the sign-in screen now shows the console version (`v3.31.1`) directly under the Demo/Live toggle, so you can tell at a glance which build is deployed without having to sign in and open the About modal. This is now the 6th place the version literal lives in `index.html` (sidebar footer, overview badge, About modal ×2, `buildConfig()`, and now the sign-in screen) — updated `CLAUDE.md` and the `dsmt-dev-workflow` skill's bump checklist accordingly.
+- Hot-swap: `index.html` -> the IIS webroot, then Ctrl+F5. No service restart needed.
+
 ## 3.31.0
 **New feature**: added a **Test connection** button next to the LDAP server / Base DN fields on Settings → General, so a directory typo can be caught immediately instead of only surfacing at next sign-in. New API route `POST /api/directory/test` (authenticated) takes `{ ldapServer, baseDN }` from the request body - not from `config.json` - and reuses the same `Get-UserGroups` probe `/api/health` already relies on for its LDAP check, so it validates exactly what's currently typed in the form, before Save. Also expanded the Deployment Guide's `config.json` reference with an exact per-prompt table of what `Install-DSMT.ps1` writes when every prompt is accepted as-is (most fields have real defaults; LDAP host and SQL Server host are the two that have none and cannot be skipped).
 - Hot-swap: `DSMT_Api.ps1` -> `<InstallDir>\server\DSMT_Api.ps1`, then `Restart-Service DSMT-Api`. `index.html` -> the IIS webroot, then Ctrl+F5. No reinstall needed.

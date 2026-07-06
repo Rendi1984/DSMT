@@ -67,7 +67,7 @@ Windows PowerShell 5.1 compatibility is MANDATORY in this repo — see the separ
 
 Format `MAJOR.FEATURE.FIX`. Check `CHANGELOG.md`'s top entry for the current number — don't trust `CLAUDE.md`/`TODO_FIXES.md` blindly, they can drift (and should be corrected if they have).
 
-**index.html version literal appears in exactly 5 places** — sidebar footer, overview badge, About modal (×2), `buildConfig()`. Bump all 5 together via one assert-then-replace (see script pattern above). If a release only touches `.ps1`/`.md` files, do **not** bump the index.html literal — the next release that *does* touch index.html jumps straight from the last-bumped number (e.g. skip 3.29.1-3.29.3, go 3.29.0 → 3.29.4).
+**index.html version literal appears in exactly 6 places** (since 3.31.1) — sidebar footer, overview badge, About modal (×2), `buildConfig()`, and the sign-in screen under the Demo/Live toggle. Bump all 6 together via one assert-then-replace (see script pattern above). If a release only touches `.ps1`/`.md` files, do **not** bump the index.html literal — the next release that *does* touch index.html jumps straight from the last-bumped number (e.g. skip 3.29.1-3.29.3, go 3.29.0 → 3.29.4).
 
 Add a `## X.Y.Z` entry to the top of `CHANGELOG.md` for every release, describing root cause + fix, not just "fixed bug in X".
 
