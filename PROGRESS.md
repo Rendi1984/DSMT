@@ -23,12 +23,11 @@ pick up immediately.
      rail on the left (matches Soft Sage's `<nav>` block). Pure layout
      change, no new functionality - do this first since everything else
      depends on how much room is left for the content area.
-  2. **Decide where the palette picker lives.** User does NOT want it
-     dropped in Access & Permissions (wrong place) - leaning toward
-     Settings -> General, in a new "Customize"/"Appearance" section
-     alongside (not replacing) the existing Light/Dark toggle. Needs a
-     concrete placement decision (ideally confirm with user) before
-     writing code.
+  2. **DECIDED (this session): Settings -> General.** Add a new
+     "Customize"/"Appearance" section there, alongside (not replacing) the
+     existing Light/Dark toggle. Not yet built - this was a decision-only
+     step per the user's "one task at a time" request. Next coding step is
+     still #1 (nav layout) or #3 (the picker itself) - user to say which.
   3. **Implement the palette picker for real**, extending the app's
      existing `dark`/`light` token-object + `rootVars` CSS-var injection
      pattern (see `renderVals()` in the real index.html) with a 2nd axis
