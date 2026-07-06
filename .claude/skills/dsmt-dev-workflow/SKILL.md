@@ -52,10 +52,18 @@ print('OLDVER left:', c.count('OLD.VER'), '| NEWVER:', c.count('NEW.VER'))  # 0 
 # single quote, \\' — not legal JSON) inside a __bundler/template edit. Always
 # also json.loads() both embedded blocks directly, not just the outer file:
 idx = c.find('<script type=\"__bundler/manifest\">{')
-json.loads(c[c.find('>', idx)+1 : c.find('</script>', idx)])
+manifest = json.loads(c[c.find('>', idx)+1 : c.find('</script>', idx)])
 idx2 = c.find('<script type=\"__bundler/template\">')
 json.loads(c[c.find('>', idx2)+1 : c.find('</script>', idx2)])
-print('manifest + template JSON: OK')
+print('manifest + template JSON: OK,', len(manifest), 'manifest keys')
+# json.loads() succeeding is NOT enough by itself (hit this in 3.31.2->3.31.3):
+# if you append a new manifest entry without first closing the PREVIOUS
+# entry's own {...} object, the new one silently becomes a nested property of
+# that previous entry instead of a new top-level sibling asset. The whole
+# blob still parses as valid JSON either way - only an explicit key-count/
+# key-presence assertion catches it, e.g.:
+#   assert len(manifest) == expected_count
+#   assert 'your-new-uuid-here' in manifest
 "
 # then headless-render it:
 cp <scratchpad>/index_vX.Y.Z.html <scratchpad>/index.html
