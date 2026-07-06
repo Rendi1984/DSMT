@@ -7,7 +7,7 @@ useful context under "Notes" so a fresh session (with no chat history) can
 pick up immediately.
 
 ## Current version
-3.31.4 (API + Console) — see `CHANGELOG.md` for the authoritative log.
+3.31.5 (API + Console) — see `CHANGELOG.md` for the authoritative log.
 
 ## Open tasks
 - CONFIRMED END TO END: the full install -> setup wizard -> sign-in chain
@@ -88,6 +88,31 @@ pick up immediately.
   live-editable settings - keep it that way to avoid two stores drifting.
 
 ## Recently completed (most recent first)
+- 3.31.5: User reported the whole Access & Permissions tab needs rethinking
+  after finding: (1) mapping SG-SystemTeam-Admins to "No access" still let
+  them sign in - CONFIRMED real bug, 'No access' had no rank entry in
+  Resolve-ConsoleRole so it fell through as if it were a real role; fixed
+  by giving it rank 0 and having Invoke-SignIn explicitly deny on it. (2)
+  Toggling "Require security-group membership" (and the local admin
+  disable button) failed with "Failed to fetch" / 408s in F12, 20 stacked
+  "toggle" requests pending 30+s - traced to Start-PodeServer never setting
+  -Threads, so Pode defaults to essentially one request at a time; any
+  burst of concurrent calls (3.31.4's 4 parallel loads right after Live
+  sign-in, or just clicking a toggle more than once while it's slow) queues
+  up and eventually 408s even though the server itself is healthy. Fixed by
+  adding -Threads 8. (3) User was confused that "Access security group" and
+  "Group -> role mapping" are two separate controls - clarified in chat
+  that this is intentional (WHETHER a domain user can sign in at all vs
+  WHICH role they get once in) but flagged it as a real UX complaint worth
+  a design pass; did NOT redesign/consolidate the tab yet - asked the user
+  whether they want that as a separate follow-up before touching UI/UX.
+  (4) "Local default administrator" master toggle and the individual
+  account's Disable button in the Local accounts list are NOT two
+  different mechanisms - toggleLocalAdmin() just calls toggleLocal() on
+  whichever local account has builtin=true. The user's report that Disable
+  "doesn't work" was actually the same Failed-to-fetch/408 pileup from (2),
+  not a separate bug - should resolve once -Threads 8 is deployed.
+  index.html unchanged this release (Auth.psm1 + DSMT_Api.ps1 only).
 - 3.31.4: Fixed Settings -> General LDAP server appearing to revert after
   Save + F5 (user report). The save path (POST /api/config -> config.json)
   was fine - there was simply no load path at all: setupLdapHost/
