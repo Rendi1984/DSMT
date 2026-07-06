@@ -7,7 +7,7 @@ useful context under "Notes" so a fresh session (with no chat history) can
 pick up immediately.
 
 ## Current version
-3.29.22 (API + Console) — see `CHANGELOG.md` for the authoritative log.
+3.30.0 (API + Console) — see `CHANGELOG.md` for the authoritative log.
 
 ## Open tasks
 - CONFIRMED END TO END: the full install -> setup wizard -> sign-in chain
@@ -75,6 +75,25 @@ pick up immediately.
   live-editable settings - keep it that way to avoid two stores drifting.
 
 ## Recently completed (most recent first)
+- 3.30.0: Made the console layout responsive (user request, from an earlier
+  session). Below ~860px viewport width the sidebar (workspace switcher +
+  nav) collapses into a hamburger button in the header; tapping it opens
+  the sidebar as a fixed/overlay panel with a dimmed backdrop, closing on
+  backdrop click, hamburger toggle, or picking a nav item. Above the
+  breakpoint nothing changed - same fixed 256px sidebar as always. Notable
+  because this app has NO CSS classes anywhere in the templated markup
+  (everything is inline `style="{{ ... }}"` bindings computed in JS) and no
+  prior resize/lifecycle handling existed for layout - added a
+  `window.resize` listener in `componentDidMount`/removed it in
+  `componentWillUnmount` (mirroring the existing keydown-listener pattern
+  used for the command palette) that flips `state.isMobile`, and the
+  sidebar's style string is now computed conditionally on
+  `isMobile`/`sidebarOpen` instead of being a static literal. Verified via
+  headless Chrome dump-dom (renders identically to the pre-change baseline,
+  same pre-existing generic `[bundle] error` false-positive both files
+  produce under `--headless`) - did not verify manually in a resized real
+  browser this session; worth a quick visual sanity check next time the UI
+  is opened live.
 - 3.29.22: Fixed Settings -> General/Database/CA "Save changes" returning
   400 every time - Save-Config's -Path parameter defaulted to the bare
   $cfgPath script variable, invisible inside a Pode route's own runspace
