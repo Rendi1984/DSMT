@@ -7,7 +7,7 @@ useful context under "Notes" so a fresh session (with no chat history) can
 pick up immediately.
 
 ## Current version
-3.31.3 (API + Console) — see `CHANGELOG.md` for the authoritative log.
+3.31.4 (API + Console) — see `CHANGELOG.md` for the authoritative log.
 
 ## Open tasks
 - CONFIRMED END TO END: the full install -> setup wizard -> sign-in chain
@@ -88,6 +88,20 @@ pick up immediately.
   live-editable settings - keep it that way to avoid two stores drifting.
 
 ## Recently completed (most recent first)
+- 3.31.4: Fixed Settings -> General LDAP server appearing to revert after
+  Save + F5 (user report). The save path (POST /api/config -> config.json)
+  was fine - there was simply no load path at all: setupLdapHost/
+  setupBaseDn were only ever set once from hardcoded setup-wizard defaults
+  in initial state, and Live sign-in never re-fetched the real saved
+  values, so every sign-in reset the form. Fixed GET /api/config to return
+  directory.{ldapServer,baseDN,domains} from config.json (it previously
+  only returned the unrelated SQL-backed Get-Config hash - a second,
+  separate store nothing else in this flow uses), and added
+  loadConfigLive() called after Live sign-in to populate the form from it.
+  NOTE: domains and contractorOUs are still sent by saveConfigLive's POST
+  body but silently ignored server-side (POST /api/config only reads
+  d.directory.ldapServer/baseDN) - same class of bug, not yet fixed; flag
+  if the user reports domains/contractor OUs also not persisting.
 - 3.31.3: The 3.31.2 offline fix DIDN'T actually work - user's F12 still
   showed react/react-dom pending plus two new 404s for the vendored
   assets' own UUIDs. Root cause: appended the two new manifest entries

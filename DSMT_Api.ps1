@@ -280,7 +280,17 @@ WHEN NOT MATCHED THEN INSERT(Username,ConsoleRole,PwHash,PwSalt,Iterations,Enabl
 
     Add-PodeRoute -Method Get -Path '/api/config' -ScriptBlock {
         if (-not (Get-Session $WebEvent)) { Write-401; return }
-        Write-PodeJsonResponse -Value (Get-Config)
+        # 'directory' comes from config.json (the same store POST /api/config
+        # writes LdapServer/BaseDN into) - previously this route only returned
+        # the SQL-backed Get-Config hash, so the console had nothing to load
+        # the saved directory settings FROM, and every sign-in re-populated
+        # Settings -> General from its hardcoded defaults instead of what was
+        # actually saved. Both stores are returned for backward compatibility.
+        $cfg = $using:Config
+        Write-PodeJsonResponse -Value @{
+            directory = @{ ldapServer = $cfg.Directory.LdapServer; baseDN = $cfg.Directory.BaseDN; domains = @($cfg.Directory.Domains) }
+            sql       = (Get-Config)
+        }
     }
 
     # ---------- DATABASE SETUP (GUI) ----------
