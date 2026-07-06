@@ -7,7 +7,7 @@ useful context under "Notes" so a fresh session (with no chat history) can
 pick up immediately.
 
 ## Current version
-3.32.2 (API + Console) — see `CHANGELOG.md` for the authoritative log.
+3.32.3 (API + Console) — see `CHANGELOG.md` for the authoritative log.
 
 ## Open tasks
 - CONFIRMED END TO END: the full install -> setup wizard -> sign-in chain
@@ -88,6 +88,36 @@ pick up immediately.
   live-editable settings - keep it that way to avoid two stores drifting.
 
 ## Recently completed (most recent first)
+- 3.32.3: MAJOR FIND. User kept reporting "Add mapping doesn't work" /
+  "DL Groups shows a count but no member details" across several rounds -
+  root-caused it all the way down via direct Playwright automation
+  (headless Chrome + real click/type simulation, not just static dump-dom)
+  to a single systemic bug: every data table in the whole app only ever
+  rendered exactly 1 row, confirmed present even in the oldest commit in
+  this repo (tested against commit 7e20891 and against v3.31.3, both
+  showed the identical defect - this has nothing to do with anything
+  changed this session). Root cause: real `<table>/<tbody>/<tr>/<td>/<th>`
+  tags trigger the browser's HTML table content-model parsing rules, which
+  silently drop or foster-parent-away any `<sc-for>` (or its children)
+  nested inside them - the DC framework's compiled runtime has
+  `sc-raw-table`/`sc-raw-tbody`/`sc-raw-tr`/`sc-raw-td`/`sc-raw-th`/
+  `sc-raw-thead` aliases specifically to work around this (confirmed by
+  reading the decompressed runtime source - RAW_WRAP/RAW_UNWRAP - and by
+  directly testing the fix empirically before committing to it), but NONE
+  of this app's 9 tables used them. Fixed all 9 (Sign-in groups & roles,
+  Users, DL Groups, Jobs, Audit Log, Certificate Authority, Password
+  Expiry, Event Viewer, Roles permission matrix) - each verified via
+  Playwright to show the correct row count end-to-end, not just headless
+  dump-dom. First attempt only aliased table/tbody/tr/td and missed thead/
+  header-tr/th, which caused a NEW regression (headers vanishing) caught
+  immediately by the same Playwright check before shipping - lesson:
+  when converting a table to sc-raw-* aliases, the header thead/tr/th need
+  the exact same treatment as the body, not just the looped row.
+  NOTE FOR FUTURE SESSIONS: if a new table/list is ever added to this app,
+  it MUST use `sc-raw-table`/`sc-raw-tbody`/`sc-raw-thead`/`sc-raw-tr`/
+  `sc-raw-td`/`sc-raw-th` instead of the real tag names, or it will hit
+  this exact bug again silently (renders fine with 0-1 items, breaks with
+  2+).
 - Packaging fix (no version bump - no code changed): user noticed
   `Install.cmd` was missing from the deployment ZIP. Root cause: CLAUDE.md's
   "File locations" table (the source of truth every deploy-ZIP staging step
