@@ -1,5 +1,13 @@
 # Changelog
 All notable changes to the Directory Services Management Tool.
+## 3.32.3
+**Major, long-standing bug found and fixed: every data table in the console only ever rendered exactly ONE row, no matter how many items were in the underlying list.** This affected Sign-in groups & roles, User Management, DL Groups, Scheduled Jobs, Audit Log, Certificate Authority, Password Expiry, Event Viewer, and the Roles permission matrix - confirmed present all the way back to the oldest commit in this repo's history, not something introduced recently.
+
+Root cause: the DC framework's compiled runtime provides `sc-raw-table`/`sc-raw-tbody`/`sc-raw-tr`/`sc-raw-td`/`sc-raw-th`/`sc-raw-thead` tag aliases specifically so a `<sc-for>` (or other custom element) can be nested inside a table structure - real `<table>`/`<tbody>`/`<tr>` tags trigger the browser HTML parser's table content-model rules, which either foster-parent stray children out of the table entirely or silently drop them as parse errors when the surrounding context isn't a genuine table element. Every table in this app used the real tag names instead of the required aliases, so every `<sc-for>` wrapping a `<tr>` had its row template physically detached from the loop by the parser at page-load time - the loop still ran (per-item state was computed correctly, e.g. `dlBreakdown`'s user/group counts, or "X requests" style summaries) but rendered zero or exactly one static row's worth of markup, regardless of the real list length.
+
+Fixed by converting all 9 affected tables to use the `sc-raw-*` aliases throughout (table, tbody, thead, tr, td, th), verified with a real headless browser (not just static HTML checks) driving each affected page and confirming the DOM row count now tracks the underlying array length - e.g. Users correctly shows all 7 demo rows (was 1, blank), the Roles matrix shows all 4 role columns × 6 capability rows (was 1 blank cell), and adding a Sign-in group mapping now visibly appends a row instead of appearing to silently fail.
+- Hot-swap: `index.html` -> IIS webroot + Ctrl+F5. No service restart needed - console-only fix.
+
 ## 3.32.2
 Batch of fixes/improvements from a single round of user testing on 3.32.0:
 - **Real bug**: creating a local break-glass account asked for the password via a browser `window.prompt()` popup *after* clicking Create - its message text echoed the username back ("Password for local account \"x\":"), which read like it was asking for the username again with no password field anywhere. Replaced with a real password input right in the form; the prompt is gone.
