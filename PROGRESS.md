@@ -10,6 +10,25 @@ pick up immediately.
 3.32.3 (API + Console) — see `CHANGELOG.md` for the authoritative log.
 
 ## Open tasks
+- FUTURE TASK (explicitly deferred by user, do NOT start until asked):
+  user took a screenshot of the real Access & Permissions page, ran it
+  through Claude Design (the visual design tool), and got back two full
+  redesign mockups - "Warm Paper" (terracotta/cream, pill tabs) and "Soft
+  Sage" (sage green, vertical settings rail) - both restyle the SAME
+  "Sign-in groups & roles" single-list concept we already shipped in
+  v3.32.0, just with warmer/friendlier visuals. User's real ask: add a
+  selectable **color theme/palette picker** to the real app - parallel to
+  the existing Light/Dark toggle, not replacing it - so users could choose
+  among (at least) the current DSMT blue, Warm Paper, and Soft Sage
+  palettes app-wide. This is a real, scoped, doable feature (the app
+  already computes a `dark`/`light` token object and interpolates CSS vars
+  via `rootVars`-style injection - extending that to a 2nd axis, palette,
+  is mechanically similar to what AccessWarmPaper.dc.html's mockup already
+  demonstrates with its own light/dark toggle). As a first, smaller step
+  the user asked for a **Demo-mode-only** prototype in a separate
+  `index-new.html` (NOT touching production `index.html`) - see Recently
+  completed for what was actually built this session. Do NOT expand this
+  into a real app-wide theme picker until explicitly asked to.
 - CONFIRMED END TO END: the full install -> setup wizard -> sign-in chain
   now works. User granted the NT AUTHORITY\SYSTEM SQL login sysadmin (fixed
   the loopback permission issue) and successfully signed in as the local
