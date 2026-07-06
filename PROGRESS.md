@@ -7,7 +7,7 @@ useful context under "Notes" so a fresh session (with no chat history) can
 pick up immediately.
 
 ## Current version
-3.31.2 (API + Console) — see `CHANGELOG.md` for the authoritative log.
+3.31.3 (API + Console) — see `CHANGELOG.md` for the authoritative log.
 
 ## Open tasks
 - CONFIRMED END TO END: the full install -> setup wizard -> sign-in chain
@@ -88,6 +88,25 @@ pick up immediately.
   live-editable settings - keep it that way to avoid two stores drifting.
 
 ## Recently completed (most recent first)
+- 3.31.3: The 3.31.2 offline fix DIDN'T actually work - user's F12 still
+  showed react/react-dom pending plus two new 404s for the vendored
+  assets' own UUIDs. Root cause: appended the two new manifest entries
+  without closing the PREVIOUS entry's brace first, so they landed nested
+  inside that entry's value instead of as sibling top-level manifest keys -
+  Object.keys(manifest) never saw them, so the unpacker never blob-ified
+  their <script src> tags, browser 404'd the literal UUID as a relative
+  path, window.React never got set, unpkg.com fallback still ran. This
+  slipped through 3.31.2's own verification because I only checked that
+  manifest json.loads()'d without error - never checked it produced the
+  RIGHT NUMBER of top-level keys or that my new keys were actually present
+  as top-level entries (not nested). Fixed the brace nesting and this time
+  asserted len(manifest)==25 with both new UUIDs present as top-level keys
+  before shipping. Re-verified headless with unpkg.com DNS-blackholed: zero
+  404s, zero unpkg.com requests this time. LESSON (added to the
+  dsmt-dev-workflow skill): when adding manifest/JSON entries via string
+  splicing, always assert the exact expected key COUNT and check specific
+  keys are top-level, not just that the whole blob parses - valid JSON can
+  still be structurally wrong (nested where it should be a sibling).
 - 3.31.2: Fixed the console silently requiring internet access - the compiled
   DC framework runtime bundled inside index.html always fetched React 18.3.1
   from unpkg.com CDN at boot (unconditionally, not gated by Demo/Live mode),
