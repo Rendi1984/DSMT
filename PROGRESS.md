@@ -51,11 +51,52 @@ pick up immediately.
      Permissions still works fully (mappings/local accounts) after
      switching palettes from the new location - zero page errors, manifest/
      template both `json.loads()` clean, brace/paren balanced.
-  4. **Roll the new visual language (warmer colors/pill or rail styling)
-     into other pages beyond Access & Permissions**, once 1-3 are solid -
-     explicitly the biggest, most token-expensive step; user flagged this
-     as "a lot of work and testing" - break it into per-page sub-tasks
-     when we get there rather than one giant sweep.
+  4. **Roll the new visual language into every other page**, once 1-3 are
+     solid - explicitly the biggest, most token-expensive step; user
+     flagged this as "a lot of work and testing" - do NOT batch, one page
+     at a time, wait for "go" before each. User's explicit ordering rule:
+     do the STRUCTURAL redesign (cards/icons/fonts/nav chrome, matching
+     the Access & Permissions/General work already done) for every page
+     first; **the full 3-palette color picker on those pages is saved for
+     the very last sub-step**, after every page's layout is already
+     rebuilt - don't wire per-page palette support as you go.
+     Full inventory of what's NOT yet redesigned, in the order to tackle
+     them (easiest first), taken from the real `index.html`'s actual
+     `state`/`titles`/`paletteIndex()` definitions (there are 21 items
+     total vs. the 2 done so far - Access & Permissions, Settings->General):
+     - **Settings sub-tabs** (reuse the card language already built - should
+       be fastest): (a) Connection (Demo/Live) - a couple of toggles/fields,
+       (b) Backup - export/restore buttons, no tables, (c) Roles - a
+       permissions matrix table (reuse card + `sc-raw-table` pattern), (d)
+       Secrets - list + add-form, same shape as the Local accounts list
+       already redesigned, (e) Data Source/Database - connection form + 2
+       test buttons.
+     - **Hafala Tools workspace**: (f) Contractor Info - one lookup form +
+       one result card, (g) DL Groups - group picker + member table, (h)
+       Overview - dashboard-style summary tiles, (i) Azure Cloud Sync -
+       status + run button + log list.
+     - **System Team workspace**: (j) Password Expiry Report - one
+       filterable table, (k) Audit Log - filterable table, similar shape,
+       (l) Dashboard - health tiles + recent activity, (m) Event Viewer -
+       filters (server/log/level/hours/query) + results table, (n)
+       Scheduled Jobs - table with enable/disable/run-now actions, (o)
+       Groups - membership management + bulk actions, (p) User Management -
+       full CRUD table, multi-select, offboarding flow (busiest page), (q)
+       Certificate Authority - cert lifecycle table + templates +
+       issue/renew/revoke actions, (r) Diagnostics - 2 sub-tabs (Domain
+       Controllers / Exchange), each with its own test/send panel (most
+       moving parts).
+     - **Global chrome** (touches everything, do last among the structural
+       passes): (s) Sign-in screen (Demo/Live toggle, domain picker, MFA
+       step), (t) the full workspace switcher + sidebar (Hafala Tools <->
+       System Team - not just the Settings-only shell built so far), (u)
+       command palette (Ctrl+K), alerts bell, toast styling, About modal.
+     - **LAST, only after (a)-(u) are all done**: wire the 3-palette
+       (DSMT Blue/Warm Paper/Soft Sage) color picker support into every
+       page above - i.e. make sure each page's new markup actually reads
+       from `PALETTE_TOKENS`/`rootVars` the same way Access & Permissions
+       and General already do, so switching palette in Settings->General
+       reskins the whole app, not just those 2 pages.
   - **DONE (this session) - full visual merge of `AccessWarmPaper.dc.html`**,
     in `index-new.html`. User explicitly asked to match that mockup file
     "everything including the nav structure", superseding task 1's left
