@@ -16,13 +16,20 @@ pick up immediately.
   separate tasks and do ONE AT A TIME (token budget is tight this
   session/account) - do NOT batch these into one big change. Wait for the
   user to say "go" on each one before starting the next.**
-  1. **Settings sub-nav layout: top pills -> left vertical rail.** User
-     noticed the Soft Sage mockup moved the Settings sub-tab menu
-     (General/Database/Connection/CA/Access/Secrets/Roles/Backup) from a
-     horizontal pill row at the top (current real layout) to a vertical
-     rail on the left (matches Soft Sage's `<nav>` block). Pure layout
-     change, no new functionality - do this first since everything else
-     depends on how much room is left for the content area.
+  1. **DONE (this session) - Settings sub-nav layout: top pills -> left
+     vertical rail**, in `index-new.html`. Added all 8 real tab names
+     (General/Database/Connection/Certificate Authority/Access &
+     Permissions/Secrets/Roles/Backup) as a left rail matching Soft Sage's
+     `<nav style="width:212px...">` block; Access & Permissions is the one
+     real/functional tab, the other 7 show a placeholder card (same
+     "isOther" pattern the mockups already used) so the rail's look and
+     feel can be judged without building out 7 more pages. Verified with
+     Playwright: clicking every rail tab switches correctly, switching back
+     to Access & Permissions still has full working mappings/toggles/local
+     accounts, zero page errors. Rebuilt from a fresh copy of the real
+     index.html each time (not layered on the palette-only demo) so
+     `index-new.html` always reflects "real app + this one change", not an
+     accumulating pile of demo-only edits.
   2. **DECIDED (this session): Settings -> General.** Add a new
      "Customize"/"Appearance" section there, alongside (not replacing) the
      existing Light/Dark toggle. Not yet built - this was a decision-only
