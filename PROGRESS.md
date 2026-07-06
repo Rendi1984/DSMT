@@ -35,14 +35,22 @@ pick up immediately.
      existing Light/Dark toggle. Not yet built - this was a decision-only
      step per the user's "one task at a time" request. Next coding step is
      still #1 (nav layout) or #3 (the picker itself) - user to say which.
-  3. **Implement the palette picker for real**, extending the app's
-     existing `dark`/`light` token-object + `rootVars` CSS-var injection
-     pattern (see `renderVals()` in the real index.html) with a 2nd axis
-     (palette: dsmt/warm/sage - names TBD, or bikeshed with user), applied
-     app-wide, persisted via localStorage the same way theme already is
-     (`dsmt-theme` key precedent). Reference implementation already proven
-     in `index-new.html`'s `PALETTE_TOKENS`/`renderVals()` - port the
-     token values from there, don't recompute from scratch.
+  3. **DONE (this session) - Implement the palette picker for real**, in
+     `index-new.html`. Moved it out of the global header (which only kept
+     the light/dark toggle) into a new "Customize" card in Settings ->
+     General, per the task 2 decision: 3 card-style buttons (DSMT Blue/
+     Warm Paper/Soft Sage) each with a color swatch and a checkmark on the
+     active one, plus the existing light/dark toggle repeated in the same
+     card so both axes live together. `renderVals()` now computes
+     `paletteCards` (replacing the old header `paletteItems`) and adds
+     `isGeneral` alongside `isAccess`/`isOther` bindings so General shows
+     the new card instead of the placeholder. Verified with Playwright:
+     clicking "General" in the rail shows the Customize card, clicking each
+     palette swatch changes `--accent` (confirmed distinct hex values per
+     palette), the in-card theme toggle flips `--bg`, and Access &
+     Permissions still works fully (mappings/local accounts) after
+     switching palettes from the new location - zero page errors, manifest/
+     template both `json.loads()` clean, brace/paren balanced.
   4. **Roll the new visual language (warmer colors/pill or rail styling)
      into other pages beyond Access & Permissions**, once 1-3 are solid -
      explicitly the biggest, most token-expensive step; user flagged this
