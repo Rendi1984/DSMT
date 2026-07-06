@@ -40,13 +40,22 @@ Write the script's output to a scratchpad path first, run the verification check
 
 ## 2. Verification checklist (every index.html change)
 
-Run all of these before committing — they catch the two failure modes that actually occur (unbalanced edits, duplicate/missing anchors):
+Run all of these before committing — they catch the three failure modes that actually occur (unbalanced edits, duplicate/missing anchors, illegal JSON escapes):
 ```bash
 python3 -c "
+import json
 c = open('<scratchpad>/index_vX.Y.Z.html').read()
 print('braces', c.count('{'), c.count('}'))   # must match
 print('parens', c.count('('), c.count(')'))   # must match
 print('OLDVER left:', c.count('OLD.VER'), '| NEWVER:', c.count('NEW.VER'))  # 0 and 5
+# Brace/paren counts do NOT catch a bad JSON escape (e.g. a backslash-escaped
+# single quote, \\' — not legal JSON) inside a __bundler/template edit. Always
+# also json.loads() both embedded blocks directly, not just the outer file:
+idx = c.find('<script type=\"__bundler/manifest\">{')
+json.loads(c[c.find('>', idx)+1 : c.find('</script>', idx)])
+idx2 = c.find('<script type=\"__bundler/template\">')
+json.loads(c[c.find('>', idx2)+1 : c.find('</script>', idx2)])
+print('manifest + template JSON: OK')
 "
 # then headless-render it:
 cp <scratchpad>/index_vX.Y.Z.html <scratchpad>/index.html
