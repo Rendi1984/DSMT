@@ -40,13 +40,22 @@ Write the script's output to a scratchpad path first, run the verification check
 
 ## 2. Verification checklist (every index.html change)
 
-Run all of these before committing — they catch the two failure modes that actually occur (unbalanced edits, duplicate/missing anchors):
+Run all of these before committing — they catch the three failure modes that actually occur (unbalanced edits, duplicate/missing anchors, illegal JSON escapes):
 ```bash
 python3 -c "
+import json
 c = open('<scratchpad>/index_vX.Y.Z.html').read()
 print('braces', c.count('{'), c.count('}'))   # must match
 print('parens', c.count('('), c.count(')'))   # must match
 print('OLDVER left:', c.count('OLD.VER'), '| NEWVER:', c.count('NEW.VER'))  # 0 and 5
+# Brace/paren counts do NOT catch a bad JSON escape (e.g. a backslash-escaped
+# single quote, \\' — not legal JSON) inside a __bundler/template edit. Always
+# also json.loads() both embedded blocks directly, not just the outer file:
+idx = c.find('<script type=\"__bundler/manifest\">{')
+json.loads(c[c.find('>', idx)+1 : c.find('</script>', idx)])
+idx2 = c.find('<script type=\"__bundler/template\">')
+json.loads(c[c.find('>', idx2)+1 : c.find('</script>', idx2)])
+print('manifest + template JSON: OK')
 "
 # then headless-render it:
 cp <scratchpad>/index_vX.Y.Z.html <scratchpad>/index.html
@@ -67,7 +76,7 @@ Windows PowerShell 5.1 compatibility is MANDATORY in this repo — see the separ
 
 Format `MAJOR.FEATURE.FIX`. Check `CHANGELOG.md`'s top entry for the current number — don't trust `CLAUDE.md`/`TODO_FIXES.md` blindly, they can drift (and should be corrected if they have).
 
-**index.html version literal appears in exactly 5 places** — sidebar footer, overview badge, About modal (×2), `buildConfig()`. Bump all 5 together via one assert-then-replace (see script pattern above). If a release only touches `.ps1`/`.md` files, do **not** bump the index.html literal — the next release that *does* touch index.html jumps straight from the last-bumped number (e.g. skip 3.29.1-3.29.3, go 3.29.0 → 3.29.4).
+**index.html version literal appears in exactly 6 places** (since 3.31.1) — sidebar footer, overview badge, About modal (×2), `buildConfig()`, and the sign-in screen under the Demo/Live toggle. Bump all 6 together via one assert-then-replace (see script pattern above). If a release only touches `.ps1`/`.md` files, do **not** bump the index.html literal — the next release that *does* touch index.html jumps straight from the last-bumped number (e.g. skip 3.29.1-3.29.3, go 3.29.0 → 3.29.4).
 
 Add a `## X.Y.Z` entry to the top of `CHANGELOG.md` for every release, describing root cause + fix, not just "fixed bug in X".
 

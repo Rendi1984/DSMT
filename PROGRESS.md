@@ -7,7 +7,7 @@ useful context under "Notes" so a fresh session (with no chat history) can
 pick up immediately.
 
 ## Current version
-3.29.22 (API + Console) — see `CHANGELOG.md` for the authoritative log.
+3.31.2 (API + Console) — see `CHANGELOG.md` for the authoritative log.
 
 ## Open tasks
 - CONFIRMED END TO END: the full install -> setup wizard -> sign-in chain
@@ -60,6 +60,19 @@ pick up immediately.
   backslash -> `\\\\` if the source itself needs one JS-level backslash,
   e.g. inside a regex like `/\\/g`). Always verify with the JSON.parse +
   node --check method above before shipping any index.html edit.
+- Hit this exact bug in 3.31.2: wrote `\'IBM Plex Mono\'` (backslash-escaped
+  single quotes) in a new template snippet. Brace/paren counts stayed
+  perfectly balanced (single quotes don't affect them), so that check passed
+  clean - but `\'` is not a legal JSON escape (JSON only allows
+  `\" \\ \/ \b \f \n \r \t \uXXXX`), so `JSON.parse` on the template string
+  failed at runtime with "Error unpacking: Bad escaped character", which
+  only surfaced via the headless-render dump-dom check, not the brace-count
+  one. Lesson: single quotes inside a `__bundler/template` edit must NEVER
+  be backslash-escaped (look at any neighboring `font-family:'IBM Plex
+  Mono'` for the correct un-escaped style) - and always literally run
+  `json.loads()` on both the extracted manifest AND template strings as a
+  dedicated pre-flight step, don't rely on brace-counting or headless-render
+  alone to catch this class of error.
 - Standard git/PR workflow used throughout this project:
   commit on `claude/repo-dsmt-file-list-u3thrd` -> push -> open PR against
   `main` -> merge -> resync the branch:
@@ -75,6 +88,61 @@ pick up immediately.
   live-editable settings - keep it that way to avoid two stores drifting.
 
 ## Recently completed (most recent first)
+- 3.31.2: Fixed the console silently requiring internet access - the compiled
+  DC framework runtime bundled inside index.html always fetched React 18.3.1
+  from unpkg.com CDN at boot (unconditionally, not gated by Demo/Live mode),
+  which the user caught in F12 as react.production.min.js/react-dom stuck
+  pending + a [bundle] error whenever the machine was offline. Fixed by
+  vendoring the exact byte-identical React/ReactDOM UMD builds (verified
+  against the runtime's own SRI hashes) as two new offline manifest assets,
+  loaded before the DC runtime's bootstrap script so its
+  "skip CDN if window.React/ReactDOM already exist" check always
+  short-circuits. Verified headless with unpkg.com DNS-blackholed: renders
+  identically, zero network attempts logged. Also moved the 3.31.1 sign-in
+  version label to sit under the LIVE/demo status line instead of under the
+  Demo/Live toggle buttons, per user clarification. The user separately
+  reported the 3.31.0 LDAP "Test connection" button returning a 405 - that
+  is almost certainly because their server is still running the pre-3.31.0
+  DSMT_Api.ps1 (missing the /api/directory/test route); told them to
+  redeploy DSMT_Api.ps1 + Restart-Service DSMT-Api. If they redeploy and
+  it's STILL 405, that's a real bug to investigate next session (haven't
+  been able to verify against a live server this session).
+- 3.31.1: Added the version number to the sign-in screen, under the Demo/Live
+  toggle (user request). Now a 6th place carries the version literal in
+  index.html - updated CLAUDE.md's bump checklist and the dsmt-dev-workflow
+  skill's "exactly N places" assertion from 5 to 6 so future sessions don't
+  under-count and leave this one stale.
+- 3.31.0: Added an LDAP "Test connection" button on Settings -> General (user
+  request, same session as 3.30.0's responsive menu). New
+  `POST /api/directory/test` route validates the LdapServer/BaseDN currently
+  typed in the form (not the saved config) via the same Get-UserGroups probe
+  `/api/health` uses. Also rewrote the Deployment Guide's config.json
+  reference section with an exact per-prompt table of Install-DSMT.ps1's
+  defaults (most fields have real defaults if you Enter-through the
+  installer; LDAP host and SQL Server host are the only two with no default
+  - the installer keeps re-prompting until you supply them). Verified via
+  the same headless-render method as 3.30.0 (renders, "Test connection"
+  button count went from 2 to 3 in the DOM dump as expected); not manually
+  clicked in a real live-mode browser session this session.
+- 3.30.0: Made the console layout responsive (user request, from an earlier
+  session). Below ~860px viewport width the sidebar (workspace switcher +
+  nav) collapses into a hamburger button in the header; tapping it opens
+  the sidebar as a fixed/overlay panel with a dimmed backdrop, closing on
+  backdrop click, hamburger toggle, or picking a nav item. Above the
+  breakpoint nothing changed - same fixed 256px sidebar as always. Notable
+  because this app has NO CSS classes anywhere in the templated markup
+  (everything is inline `style="{{ ... }}"` bindings computed in JS) and no
+  prior resize/lifecycle handling existed for layout - added a
+  `window.resize` listener in `componentDidMount`/removed it in
+  `componentWillUnmount` (mirroring the existing keydown-listener pattern
+  used for the command palette) that flips `state.isMobile`, and the
+  sidebar's style string is now computed conditionally on
+  `isMobile`/`sidebarOpen` instead of being a static literal. Verified via
+  headless Chrome dump-dom (renders identically to the pre-change baseline,
+  same pre-existing generic `[bundle] error` false-positive both files
+  produce under `--headless`) - did not verify manually in a resized real
+  browser this session; worth a quick visual sanity check next time the UI
+  is opened live.
 - 3.29.22: Fixed Settings -> General/Database/CA "Save changes" returning
   400 every time - Save-Config's -Path parameter defaulted to the bare
   $cfgPath script variable, invisible inside a Pode route's own runspace

@@ -729,6 +729,27 @@ WHEN NOT MATCHED THEN INSERT(Username,ConsoleRole,PwHash,PwSalt,Iterations,Enabl
         try { Save-Config -Cfg $cfg -Path $using:cfgPath; Write-PodeJsonResponse -Value @{ ok=$true } }
         catch { Set-PodeResponseStatus -Code 400; Write-PodeJsonResponse -Value @{ ok=$false; error=$_.Exception.Message } }
     }
+    # Lets the console's Settings -> General "Test connection" button check the
+    # LDAP server/Base DN currently typed in the form - before Save, so a typo
+    # can be caught without persisting it first. Reuses the same
+    # Get-UserGroups probe /api/health already uses for its LDAP check.
+    Add-PodeRoute -Method Post -Path '/api/directory/test' -ScriptBlock {
+        $s = Get-Session $WebEvent; if (-not $s) { Write-401; return }
+        $d = $WebEvent.Data
+        $server = $d.ldapServer
+        $baseDn = $d.baseDN
+        if ([string]::IsNullOrWhiteSpace($server) -or [string]::IsNullOrWhiteSpace($baseDn)) {
+            Write-PodeJsonResponse -Value @{ ok = $false; error = 'LDAP server and Base DN are both required.' }; return
+        }
+        try {
+            $sw = [System.Diagnostics.Stopwatch]::StartNew()
+            Get-UserGroups -Server $server -BaseDN $baseDn -SamAccountName 'krbtgt' | Out-Null
+            $sw.Stop()
+            Write-PodeJsonResponse -Value @{ ok = $true; detail = "Reached $server ($baseDn) in $($sw.ElapsedMilliseconds) ms" }
+        } catch {
+            Write-PodeJsonResponse -Value @{ ok = $false; error = $_.Exception.Message }
+        }
+    }
     Add-PodeRoute -Method Post -Path '/api/ca/config' -ScriptBlock {
         $s = Get-Session $WebEvent; if (-not $s) { Write-401; return }
         $d = $WebEvent.Data
