@@ -7,7 +7,7 @@ useful context under "Notes" so a fresh session (with no chat history) can
 pick up immediately.
 
 ## Current version
-3.31.5 (API + Console) — see `CHANGELOG.md` for the authoritative log.
+3.32.0 (API + Console) — see `CHANGELOG.md` for the authoritative log.
 
 ## Open tasks
 - CONFIRMED END TO END: the full install -> setup wizard -> sign-in chain
@@ -88,6 +88,25 @@ pick up immediately.
   live-editable settings - keep it that way to avoid two stores drifting.
 
 ## Recently completed (most recent first)
+- 3.32.0: Redesigned Access & Permissions per direct user request ("I don't
+  want both Access security group AND role mapping - one category for
+  sign-in, define groups by LDAP, define their permissions there").
+  Removed the Require security-group membership toggle + Access security
+  group dropdown entirely (both in Settings -> General -> Access &
+  Permissions AND the first-run setup wizard's Directory step - the
+  wizard's copy was purely decorative, never actually submitted anywhere,
+  confirmed by grepping the setup/save POST body). Removed 'No access'
+  from the role dropdown (meaningless now - not being in any mapped group
+  already denies sign-in). Auth.psm1's Invoke-SignIn now denies outright
+  when Resolve-ConsoleRole finds no matching group, replacing the old
+  silent "fall back to Read-only" behavior. Removed the now-dead
+  POST /api/access/require-group route. Updated Deployment_Guide.html's
+  Access Control section and troubleshooting table to match. Verified
+  headless (manifest 25 keys, template parses, renders clean) - user
+  should re-verify group mapping to System Administrator still works and
+  that a user in NO mapped group is now cleanly denied (with the new
+  "Not a member of any group mapped for console access" message) rather
+  than silently landing on Read-only.
 - 3.31.5: User reported the whole Access & Permissions tab needs rethinking
   after finding: (1) mapping SG-SystemTeam-Admins to "No access" still let
   them sign in - CONFIRMED real bug, 'No access' had no rank entry in

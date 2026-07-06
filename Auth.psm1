@@ -76,14 +76,14 @@ function Get-UserGroups {
 
 function Resolve-ConsoleRole {
     <# Maps the user's groups to a console role using dbo.RoleMappings.
-       'No access' ranks lowest (0) - if a user is ALSO in another group
-       mapped to a real role, that real role wins (matches how the rest of
-       this rank comparison already works: highest wins). Invoke-SignIn is
-       what actually turns a resolved 'No access' into a denied sign-in. #>
+       A user not in ANY mapped group resolves to $null - Invoke-SignIn denies
+       that outright. There is no separate access-group gate and no 'No access'
+       role: being listed here (in some group) IS the access grant, and the
+       mapped role IS the permission level - one list controls both. #>
     param([string[]] $Groups)
     $maps = Get-RoleMappings
     $best = $null
-    $rank = @{ 'System Administrator' = 4; 'Operator' = 3; 'Helpdesk Operator' = 2; 'Read-only' = 1; 'No access' = 0 }
+    $rank = @{ 'System Administrator' = 4; 'Operator' = 3; 'Helpdesk Operator' = 2; 'Read-only' = 1 }
     foreach ($m in $maps) {
         if ($Groups -contains $m['LdapGroup']) {
             $role = $m['ConsoleRole']
@@ -112,18 +112,12 @@ function Invoke-SignIn {
     if (-not $ok) { return [pscustomobject]@{ Ok=$false; Reason='Invalid domain credentials' } }
 
     $groups = Get-UserGroups -Server $Config.Directory.LdapServer -BaseDN $Config.Directory.BaseDN -SamAccountName ($Username -replace '@.*$','')
-    $requireGroup = (Get-Config 'RequireSecurityGroup') -eq 'true'
-    $accessGroup  = Get-Config 'AccessSecurityGroup'
-    if ($requireGroup -and ($groups -notcontains $accessGroup)) {
-        return [pscustomobject]@{ Ok=$false; Reason="Not a member of $accessGroup" }
-    }
+    # A single list controls both "can this user sign in at all" and "what
+    # role do they get": being in a group mapped in dbo.RoleMappings IS the
+    # access grant. Not being in any mapped group denies sign-in outright -
+    # there is no separate access-group toggle to also satisfy.
     $role = Resolve-ConsoleRole -Groups $groups
-    # Previously 'No access' was just passed through Resolve-ConsoleRole as if
-    # it were a normal role name (it's a non-empty string, so the "-not $role"
-    # fallback below never caught it either) - mapping a group to 'No access'
-    # silently did nothing, the user still signed in. Explicitly deny here.
-    if ($role -eq 'No access') { return [pscustomobject]@{ Ok=$false; Reason='Sign-in blocked by role mapping (No access)' } }
-    if (-not $role) { $role = 'Read-only' }
+    if (-not $role) { return [pscustomobject]@{ Ok=$false; Reason='Not a member of any group mapped for console access' } }
     return [pscustomobject]@{ Ok=$true; Username=$Username; Role=$role; IsLocal=$false }
 }
 
