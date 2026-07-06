@@ -56,6 +56,28 @@ pick up immediately.
      explicitly the biggest, most token-expensive step; user flagged this
      as "a lot of work and testing" - break it into per-page sub-tasks
      when we get there rather than one giant sweep.
+  - **DONE (this session) - full visual merge of `AccessWarmPaper.dc.html`**,
+    in `index-new.html`. User explicitly asked to match that mockup file
+    "everything including the nav structure", superseding task 1's left
+    rail: replaced it with the mockup's actual structure - a slim `<aside>`
+    brand/user-footer shell (logo, "Directory Services Management Tool",
+    admin footer + theme toggle) plus a top pill-row of the 8 Settings tabs
+    inside `<main>` (matches the mockup; the rail was our own earlier
+    approximation before the real file was shared). Also added: Hanken
+    Grotesk + IBM Plex Mono fonts (Google Fonts link, same as the mockup -
+    falls back to system font if offline, this file isn't shipped so no
+    CLAUDE.md offline-mandate conflict), SVG icons on the Console access /
+    Sign-in groups & roles card headers, the "Let's finish setting up
+    access" amber banner + green "setup complete" banner (was already
+    close, restyled to match), a "Connected" status pill in the header,
+    and card drop-shadows (new `--card-shadow` token per palette). All 3
+    palettes' token sets extended with `green`/`greenSoft`/`greenBorder`/
+    `accentShadow`/`cardShadow` to support the above. Verified with
+    Playwright: aside/header/Connected badge/setup banners all render,
+    clicking a top pill switches tabs (Database -> placeholder, Access ->
+    real content), removing the System Administrator mapping flips the
+    banner from "complete" back to "pending", zero page errors, manifest
+    (25 keys) + template both `json.loads()` clean, braces/parens balanced.
   Every step needs the same verification rigor used this session
   (json.loads on manifest+template, brace/paren balance, headless render,
   Playwright interaction test) before shipping - this app has already had
