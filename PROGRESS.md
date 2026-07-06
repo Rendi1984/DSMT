@@ -10,6 +10,67 @@ pick up immediately.
 3.32.3 (API + Console) — see `CHANGELOG.md` for the authoritative log.
 
 ## Open tasks
+- **Design-mockup integration into real index.html - user approved the
+  index-new.html demo (all 3 palettes + dark/light look good) and wants it
+  merged into production. User explicitly asked to break this into
+  separate tasks and do ONE AT A TIME (token budget is tight this
+  session/account) - do NOT batch these into one big change. Wait for the
+  user to say "go" on each one before starting the next.**
+  1. **DONE (this session) - Settings sub-nav layout: top pills -> left
+     vertical rail**, in `index-new.html`. Added all 8 real tab names
+     (General/Database/Connection/Certificate Authority/Access &
+     Permissions/Secrets/Roles/Backup) as a left rail matching Soft Sage's
+     `<nav style="width:212px...">` block; Access & Permissions is the one
+     real/functional tab, the other 7 show a placeholder card (same
+     "isOther" pattern the mockups already used) so the rail's look and
+     feel can be judged without building out 7 more pages. Verified with
+     Playwright: clicking every rail tab switches correctly, switching back
+     to Access & Permissions still has full working mappings/toggles/local
+     accounts, zero page errors. Rebuilt from a fresh copy of the real
+     index.html each time (not layered on the palette-only demo) so
+     `index-new.html` always reflects "real app + this one change", not an
+     accumulating pile of demo-only edits.
+  2. **DECIDED (this session): Settings -> General.** Add a new
+     "Customize"/"Appearance" section there, alongside (not replacing) the
+     existing Light/Dark toggle. Not yet built - this was a decision-only
+     step per the user's "one task at a time" request. Next coding step is
+     still #1 (nav layout) or #3 (the picker itself) - user to say which.
+  3. **DONE (this session) - Implement the palette picker for real**, in
+     `index-new.html`. Moved it out of the global header (which only kept
+     the light/dark toggle) into a new "Customize" card in Settings ->
+     General, per the task 2 decision: 3 card-style buttons (DSMT Blue/
+     Warm Paper/Soft Sage) each with a color swatch and a checkmark on the
+     active one, plus the existing light/dark toggle repeated in the same
+     card so both axes live together. `renderVals()` now computes
+     `paletteCards` (replacing the old header `paletteItems`) and adds
+     `isGeneral` alongside `isAccess`/`isOther` bindings so General shows
+     the new card instead of the placeholder. Verified with Playwright:
+     clicking "General" in the rail shows the Customize card, clicking each
+     palette swatch changes `--accent` (confirmed distinct hex values per
+     palette), the in-card theme toggle flips `--bg`, and Access &
+     Permissions still works fully (mappings/local accounts) after
+     switching palettes from the new location - zero page errors, manifest/
+     template both `json.loads()` clean, brace/paren balanced.
+  4. **Roll the new visual language (warmer colors/pill or rail styling)
+     into other pages beyond Access & Permissions**, once 1-3 are solid -
+     explicitly the biggest, most token-expensive step; user flagged this
+     as "a lot of work and testing" - break it into per-page sub-tasks
+     when we get there rather than one giant sweep.
+  Every step needs the same verification rigor used this session
+  (json.loads on manifest+template, brace/paren balance, headless render,
+  Playwright interaction test) before shipping - this app has already had
+  multiple sessions where a change looked fine in a quick dump-dom check
+  but was actually broken (see the systemic table-rendering bug, 3.32.3).
+  - **Working convention while this redesign is in progress**: do all of
+    steps 1-4 IN `index-new.html`, not `index.html` - user wants
+    `index.html` kept untouched as a known-good rollback/backup copy
+    throughout the whole redesign process. Once the user is happy with
+    where `index-new.html` ends up (could be a while, given "one task at a
+    time"), THEY will decide when/whether to promote it to replace
+    `index.html` as the real deployed file - don't do that swap
+    unprompted. Until then `index-new.html` is not part of the deploy ZIP
+    and CLAUDE.md's file-location table (it's a working file, not a
+    shipped one).
 - CONFIRMED END TO END: the full install -> setup wizard -> sign-in chain
   now works. User granted the NT AUTHORITY\SYSTEM SQL login sysadmin (fixed
   the loopback permission issue) and successfully signed in as the local
