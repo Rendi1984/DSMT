@@ -31,6 +31,7 @@ index.html          → deploy bundle (root)
 DSMT_Api.ps1        → server/
 Install-DSMT.ps1    → server/
 Install.ps1         → server/
+Install.cmd         → root/  ← one-click self-elevating installer, double-click entry point
 Start-Install.ps1   → root/
 Uninstall-DSMT.ps1  → root/
 Auth.psm1           → server/modules/

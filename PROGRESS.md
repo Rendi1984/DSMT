@@ -88,6 +88,15 @@ pick up immediately.
   live-editable settings - keep it that way to avoid two stores drifting.
 
 ## Recently completed (most recent first)
+- Packaging fix (no version bump - no code changed): user noticed
+  `Install.cmd` was missing from the deployment ZIP. Root cause: CLAUDE.md's
+  "File locations" table (the source of truth every deploy-ZIP staging step
+  reads from) never listed `Install.cmd` at all, even though it's a real,
+  actively-documented root-level file (the one-click self-elevating
+  installer entry point - see README.md/CHANGELOG.md). Added it to the
+  table (`Install.cmd → root/`) and to the current ZIP. Worth double-
+  checking the table against `ls` next time a "missing file" report comes
+  in, rather than assuming the table is complete.
 - 3.32.2: Batch of fixes from user testing 3.32.0 live: (1) local account
   creation used window.prompt() for the password AFTER clicking Create,
   whose message echoed the username - user read it as "asks for username,
