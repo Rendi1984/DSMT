@@ -91,7 +91,14 @@ function Get-Session {
     return [pscustomobject]@{ token=$token; username=$rows[0]['Username']; role=$rows[0]['ConsoleRole']; isLocal=[bool]$rows[0]['IsLocal'] }
 }
 
-Start-PodeServer {
+Start-PodeServer -Threads 8 {
+    # -Threads 8: without this Pode defaults to a single request-processing
+    # thread, so any concurrent calls (the console fires loadHealthLive/
+    # loadDbInfoLive/loadAlertsLive/loadConfigLive together right after
+    # sign-in, plus anything a second browser tab or a slow button click does)
+    # queue up strictly one-at-a-time. Under any real load that shows up as
+    # exactly what was seen in the field: requests pending for 30+ seconds
+    # and eventually timing out with 408s, even though the API itself was up.
     # Bind the values into THIS scriptblock's scope. Pode's $using: resolver only
     # reliably captures variables that live inside the Start-PodeServer block on
     # Windows PowerShell 5.1; referencing outer-script vars throws
