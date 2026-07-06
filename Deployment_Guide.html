@@ -523,6 +523,28 @@ notepad config.json</pre><p>Set <strong>Database</strong>, <strong>Directory</st
           </tbody>
         </table>
       </div>
+
+      <h3>What ships if you accept every prompt as-is</h3>
+      <p>The interactive <code>Install-DSMT.ps1</code> prompt walks you through every setting below with <code>(default)</code> shown in brackets — pressing Enter on each one accepts that value verbatim into <code>config.json</code>. Two fields have <strong>no default and cannot be skipped</strong> (marked below); everything else is safe to Enter-through on a first pass and change later from Settings → General without reinstalling.</p>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>Prompt</th><th>What you get if you just press Enter</th></tr></thead>
+          <tbody>
+            <tr><td>SQL Server host</td><td><strong>No default — required.</strong> The installer will keep re-asking until you type one.</td></tr>
+            <tr><td>Database name</td><td><code>DSMTOOL</code></td></tr>
+            <tr><td>SQL auth mode</td><td><code>Windows</code> (integrated auth — the API service account needs <code>db_datareader</code>/<code>db_datawriter</code> on that database; see Permissions above)</td></tr>
+            <tr><td>Domain controller / LDAP host</td><td><strong>No default — required.</strong> Needed for sign-in and every directory lookup; the installer will keep re-asking until you type one.</td></tr>
+            <tr><td>Base DN</td><td>Auto-guessed from the LDAP host's DNS suffix (e.g. typing <code>dc01.lab.local</code> pre-fills <code>DC=lab,DC=local</code>) — shown as the default, editable before you accept it.</td></tr>
+            <tr><td>Allowed sign-in domains</td><td>Left empty (no domains pre-populated) — add them later in Settings → General, or type a comma-separated list here.</td></tr>
+            <tr><td>API port</td><td><code>8780</code></td></tr>
+            <tr><td>Console (IIS) port</td><td><code>8080</code></td></tr>
+            <tr><td>Azure AD Connect server, Certificate Authority config string</td><td>Not prompted at all — stay blank (<code>""</code>) unless you pass <code>-AdConnectServer</code> / <code>-CaConfigString</code> on the command line, or fill them in later from Settings.</td></tr>
+            <tr><td><code>-EncryptSql</code> switch</td><td>Off by default → <code>Database.Encrypt = false</code>. Turn it on explicitly only once your SQL Server has a trusted TLS certificate — on-prem SQL reached by short hostname commonly fails TLS/SSPI cert-name checks with it on.</td></tr>
+            <tr><td><code>Database.TrustServerCertificate</code></td><td>Always written as <code>true</code> by the installer — not prompted.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Running <code>-SetupViaBrowser</code> instead skips every prompt above except SQL/port basics — the browser-based first-run wizard (see below) collects the LDAP host, Base DN, and local administrator afterwards, over HTTP, and writes them the same way.</p>
     </section>
 
     <section id="first-signin">
@@ -711,8 +733,8 @@ notepad config.json</pre><p>Set <strong>Database</strong>, <strong>Directory</st
 
       <div class="feature" id="f-settings">
         <div class="feature-head"><h3>Settings</h3></div>
-        <p>General (LDAP server, Base DN, contractor OUs, sign-in domains), Connection (Demo/Live, API URL), Database, Certificate Authority, Access, and a config export/import (real JSON download / file-picker restore).</p>
-        <div class="feature-meta"><code>POST /api/config</code></div>
+        <p>General (LDAP server, Base DN, contractor OUs, sign-in domains), Connection (Demo/Live, API URL), Database, Certificate Authority, Access, and a config export/import (real JSON download / file-picker restore). The General tab's LDAP server/Base DN fields have their own <strong>“Test connection”</strong> button (added 3.31.0) — it checks whatever is currently typed in the form (not what's saved yet), so a typo can be caught before you hit Save.</p>
+        <div class="feature-meta"><code>POST /api/config</code><code>POST /api/directory/test</code></div>
       </div>
     </section>
 

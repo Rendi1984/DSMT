@@ -1,5 +1,9 @@
 # Changelog
 All notable changes to the Directory Services Management Tool.
+## 3.31.0
+**New feature**: added a **Test connection** button next to the LDAP server / Base DN fields on Settings → General, so a directory typo can be caught immediately instead of only surfacing at next sign-in. New API route `POST /api/directory/test` (authenticated) takes `{ ldapServer, baseDN }` from the request body - not from `config.json` - and reuses the same `Get-UserGroups` probe `/api/health` already relies on for its LDAP check, so it validates exactly what's currently typed in the form, before Save. Also expanded the Deployment Guide's `config.json` reference with an exact per-prompt table of what `Install-DSMT.ps1` writes when every prompt is accepted as-is (most fields have real defaults; LDAP host and SQL Server host are the two that have none and cannot be skipped).
+- Hot-swap: `DSMT_Api.ps1` -> `<InstallDir>\server\DSMT_Api.ps1`, then `Restart-Service DSMT-Api`. `index.html` -> the IIS webroot, then Ctrl+F5. No reinstall needed.
+
 ## 3.30.0
 **New feature**: the console layout is now responsive below ~860px width. The sidebar (workspace switcher + nav) collapses into a hamburger-menu button in the header; tapping it slides the sidebar in as an overlay panel with a dimmed backdrop, and it auto-closes on backdrop click, on hamburger toggle, or after picking any nav item. Above the breakpoint the layout is pixel-identical to before - the sidebar stays fixed-width and always visible, same as every prior release. Implemented purely with existing patterns (inline computed styles + `componentDidMount`/`componentWillUnmount` lifecycle, matching the existing keyboard-shortcut listener) - no new CSS framework or breakpoint library added, and no page/route was touched other than the shell layout in `index.html`.
 - Hot-swap: `index.html` -> the IIS webroot (e.g. `C:\inetpub\dsmt\index.html`), then hard-refresh the browser (Ctrl+F5). No service restart needed.

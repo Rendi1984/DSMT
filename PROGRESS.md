@@ -7,7 +7,7 @@ useful context under "Notes" so a fresh session (with no chat history) can
 pick up immediately.
 
 ## Current version
-3.30.0 (API + Console) — see `CHANGELOG.md` for the authoritative log.
+3.31.0 (API + Console) — see `CHANGELOG.md` for the authoritative log.
 
 ## Open tasks
 - CONFIRMED END TO END: the full install -> setup wizard -> sign-in chain
@@ -75,6 +75,18 @@ pick up immediately.
   live-editable settings - keep it that way to avoid two stores drifting.
 
 ## Recently completed (most recent first)
+- 3.31.0: Added an LDAP "Test connection" button on Settings -> General (user
+  request, same session as 3.30.0's responsive menu). New
+  `POST /api/directory/test` route validates the LdapServer/BaseDN currently
+  typed in the form (not the saved config) via the same Get-UserGroups probe
+  `/api/health` uses. Also rewrote the Deployment Guide's config.json
+  reference section with an exact per-prompt table of Install-DSMT.ps1's
+  defaults (most fields have real defaults if you Enter-through the
+  installer; LDAP host and SQL Server host are the only two with no default
+  - the installer keeps re-prompting until you supply them). Verified via
+  the same headless-render method as 3.30.0 (renders, "Test connection"
+  button count went from 2 to 3 in the DOM dump as expected); not manually
+  clicked in a real live-mode browser session this session.
 - 3.30.0: Made the console layout responsive (user request, from an earlier
   session). Below ~860px viewport width the sidebar (workspace switcher +
   nav) collapses into a hamburger button in the header; tapping it opens
