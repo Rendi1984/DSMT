@@ -638,7 +638,7 @@ notepad config.json</pre><p>Set <strong>Database</strong>, <strong>Directory</st
 
       <div class="feature" id="f-dl">
         <div class="feature-head"><h3>DL Groups</h3></div>
-        <p>Looks up a distribution/security group by name and lists its members (name, email, title, type, enabled state). Export downloads the result as a real <code>.csv</code>.</p>
+        <p>Looks up a distribution/security group by name and lists its members (name, email, title, type, enabled state). Export downloads the result as a real <code>.csv</code>. Since 3.32.2, a member's Display Name field in AD being blank (common for bare lab/test accounts, and for nested group members) no longer shows an empty row - it falls back to the account's sAMAccountName so there's always at least an identifying name shown.</p>
         <div class="feature-meta"><code>GET /api/dl/:group</code></div>
       </div>
 
@@ -714,7 +714,8 @@ notepad config.json</pre><p>Set <strong>Database</strong>, <strong>Directory</st
         <p>Now there is exactly one list, <strong>Sign-in groups &amp; roles</strong>: a domain user can sign in <em>only</em> if they belong to one of the LDAP groups listed there, and the role shown next to it is what they get. Not listed in any group there = cannot sign in at all - being mapped IS the access grant, so there's no separate "No access" option or access-group toggle anymore.</p>
         <p>Below that: the built-in local administrator's live status (enable/disable — reads from and drives the same account as the row in Local accounts, they can't drift apart; it always bypasses the group list above), the local break-glass accounts list, and the MFA / SSO toggles.</p>
         <h4>To configure</h4>
-        <p>Add at least one mapping to <strong>System Administrator</strong> — this is the “Connect an LDAP admin group” setup task.</p>
+        <p>Add at least one mapping to <strong>System Administrator</strong> — this is the “Connect an LDAP admin group” setup task. The LDAP security group field (3.32.2+) is free text - type either the group's sAMAccountName (e.g. <code>SG-SystemTeam-Admins</code>) or its full DN (e.g. <code>CN=SG-SystemTeam-Admins,OU=Groups,DC=lab,DC=local</code>); there's no fixed picklist to create the group against first.</p>
+        <p>Creating a local break-glass account now has its own password field in the form (3.32.2+) - a browser <code>prompt()</code> popup used to ask for it separately, which read as if the dialog wanted the username again since it echoed it back in the message text.</p>
         <div class="callout warn" style="margin:12px 0 0;">
           <div class="dot"></div>
           <p><strong>MFA is console-side only</strong> Enabling it prompts for a 6-digit code, but the API does not verify it server-side yet — don't rely on it as your only second factor in production.</p>

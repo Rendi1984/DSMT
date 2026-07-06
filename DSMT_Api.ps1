@@ -563,10 +563,18 @@ WHEN NOT MATCHED THEN INSERT(Username,ConsoleRole,PwHash,PwSalt,Iterations,Enabl
     }
     Add-PodeRoute -Method Post -Path '/api/access/local/:id/toggle' -ScriptBlock {
         $s = Get-Session $WebEvent; if (-not $s) { Write-401; return }
-        $en = [int][bool]$WebEvent.Data.enabled
-        Invoke-Sql 'UPDATE dbo.LocalAccounts SET Enabled=@e WHERE Id=@i' @{ e=$en; i=[int]$WebEvent.Parameters['id'] } -NonQuery | Out-Null
-        Write-Audit -Actor $s.username -Action $(if($en -eq 1){'Local account enabled'}else{'Local account disabled'}) -Target $WebEvent.Parameters['id'] -Result 'Success' -Kind 'access'
-        Write-PodeJsonResponse -Value @{ ok=$true }
+        try {
+            $en = [int][bool]$WebEvent.Data.enabled
+            Invoke-Sql 'UPDATE dbo.LocalAccounts SET Enabled=@e WHERE Id=@i' @{ e=$en; i=[int]$WebEvent.Parameters['id'] } -NonQuery | Out-Null
+            Write-Audit -Actor $s.username -Action $(if($en -eq 1){'Local account enabled'}else{'Local account disabled'}) -Target $WebEvent.Parameters['id'] -Result 'Success' -Kind 'access'
+            Write-PodeJsonResponse -Value @{ ok=$true }
+        } catch {
+            # Previously unguarded - a bad :id or a transient SQL error surfaced as
+            # a raw 500 with no body, which the console showed as "Failed to fetch"
+            # (indistinguishable from a network problem). Give it a readable error.
+            Set-PodeResponseStatus -Code 400
+            Write-PodeJsonResponse -Value @{ ok = $false; error = $_.Exception.Message }
+        }
     }
     Add-PodeRoute -Method Delete -Path '/api/access/local/:id' -ScriptBlock {
         $s = Get-Session $WebEvent; if (-not $s) { Write-401; return }
