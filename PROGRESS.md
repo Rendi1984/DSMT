@@ -10,25 +10,53 @@ pick up immediately.
 3.32.3 (API + Console) — see `CHANGELOG.md` for the authoritative log.
 
 ## Open tasks
-- FUTURE TASK (explicitly deferred by user, do NOT start until asked):
-  user took a screenshot of the real Access & Permissions page, ran it
-  through Claude Design (the visual design tool), and got back two full
-  redesign mockups - "Warm Paper" (terracotta/cream, pill tabs) and "Soft
-  Sage" (sage green, vertical settings rail) - both restyle the SAME
-  "Sign-in groups & roles" single-list concept we already shipped in
-  v3.32.0, just with warmer/friendlier visuals. User's real ask: add a
-  selectable **color theme/palette picker** to the real app - parallel to
-  the existing Light/Dark toggle, not replacing it - so users could choose
-  among (at least) the current DSMT blue, Warm Paper, and Soft Sage
-  palettes app-wide. This is a real, scoped, doable feature (the app
-  already computes a `dark`/`light` token object and interpolates CSS vars
-  via `rootVars`-style injection - extending that to a 2nd axis, palette,
-  is mechanically similar to what AccessWarmPaper.dc.html's mockup already
-  demonstrates with its own light/dark toggle). As a first, smaller step
-  the user asked for a **Demo-mode-only** prototype in a separate
-  `index-new.html` (NOT touching production `index.html`) - see Recently
-  completed for what was actually built this session. Do NOT expand this
-  into a real app-wide theme picker until explicitly asked to.
+- **Design-mockup integration into real index.html - user approved the
+  index-new.html demo (all 3 palettes + dark/light look good) and wants it
+  merged into production. User explicitly asked to break this into
+  separate tasks and do ONE AT A TIME (token budget is tight this
+  session/account) - do NOT batch these into one big change. Wait for the
+  user to say "go" on each one before starting the next.**
+  1. **Settings sub-nav layout: top pills -> left vertical rail.** User
+     noticed the Soft Sage mockup moved the Settings sub-tab menu
+     (General/Database/Connection/CA/Access/Secrets/Roles/Backup) from a
+     horizontal pill row at the top (current real layout) to a vertical
+     rail on the left (matches Soft Sage's `<nav>` block). Pure layout
+     change, no new functionality - do this first since everything else
+     depends on how much room is left for the content area.
+  2. **Decide where the palette picker lives.** User does NOT want it
+     dropped in Access & Permissions (wrong place) - leaning toward
+     Settings -> General, in a new "Customize"/"Appearance" section
+     alongside (not replacing) the existing Light/Dark toggle. Needs a
+     concrete placement decision (ideally confirm with user) before
+     writing code.
+  3. **Implement the palette picker for real**, extending the app's
+     existing `dark`/`light` token-object + `rootVars` CSS-var injection
+     pattern (see `renderVals()` in the real index.html) with a 2nd axis
+     (palette: dsmt/warm/sage - names TBD, or bikeshed with user), applied
+     app-wide, persisted via localStorage the same way theme already is
+     (`dsmt-theme` key precedent). Reference implementation already proven
+     in `index-new.html`'s `PALETTE_TOKENS`/`renderVals()` - port the
+     token values from there, don't recompute from scratch.
+  4. **Roll the new visual language (warmer colors/pill or rail styling)
+     into other pages beyond Access & Permissions**, once 1-3 are solid -
+     explicitly the biggest, most token-expensive step; user flagged this
+     as "a lot of work and testing" - break it into per-page sub-tasks
+     when we get there rather than one giant sweep.
+  Every step needs the same verification rigor used this session
+  (json.loads on manifest+template, brace/paren balance, headless render,
+  Playwright interaction test) before shipping - this app has already had
+  multiple sessions where a change looked fine in a quick dump-dom check
+  but was actually broken (see the systemic table-rendering bug, 3.32.3).
+  - **Working convention while this redesign is in progress**: do all of
+    steps 1-4 IN `index-new.html`, not `index.html` - user wants
+    `index.html` kept untouched as a known-good rollback/backup copy
+    throughout the whole redesign process. Once the user is happy with
+    where `index-new.html` ends up (could be a while, given "one task at a
+    time"), THEY will decide when/whether to promote it to replace
+    `index.html` as the real deployed file - don't do that swap
+    unprompted. Until then `index-new.html` is not part of the deploy ZIP
+    and CLAUDE.md's file-location table (it's a working file, not a
+    shipped one).
 - CONFIRMED END TO END: the full install -> setup wizard -> sign-in chain
   now works. User granted the NT AUTHORITY\SYSTEM SQL login sysadmin (fixed
   the loopback permission issue) and successfully signed in as the local
