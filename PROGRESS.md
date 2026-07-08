@@ -107,10 +107,29 @@ pick up immediately.
        count matches expected (14 for the current MATRIX data - confirms
        every row rendered, not just 1), Access & Permissions unaffected -
        zero page errors, manifest (25 keys) + template both `json.loads()`
-       clean, braces/parens balanced. (d)
-       Secrets - list + add-form, same shape as the Local accounts list
-       already redesigned, (e) Data Source/Database - connection form + 2
-       test buttons.
+       clean, braces/parens balanced. (d) **DONE (this session) -
+       Secrets** - 3 cards: "Secret storage" (provider dropdown -
+       DPAPI/Azure Key Vault/HashiCorp Vault), "Add / update a service
+       account" (name/account/password form + Save encrypted/Test bind
+       buttons), and "Stored secrets" (list with masked value, rotated-
+       timestamp, and a per-row Rotate button - same flat-list shape as
+       the Local accounts list already redesigned, not a table so no
+       `sc-raw-*` needed). Hit and fixed a real bug while building this:
+       the demo toast text `'Secret "'+l+'" saved...'` had literal
+       unescaped `"` characters, which broke the outer `__bundler/template`
+       JSON string (caught immediately by the mandatory `json.loads()`
+       pre-flight check, not shipped) - fixed by rewording the toast to
+       avoid quotes entirely rather than trying to re-escape them, a
+       reminder that any literal `"` typed directly into an already-
+       escaped template edit needs `\"`, same class of gotcha as the
+       `\'` mistake documented from 3.31.2. Verified with Playwright: all
+       3 cards render, exactly 3 stored secrets initially (regression
+       check against the systemic table-bug class), adding a new secret
+       via the form appears in the list, Test bind and Rotate both show
+       their toasts and Rotate updates the timestamp, Access & Permissions
+       unaffected - zero page errors, manifest (25 keys) + template both
+       `json.loads()` clean, braces/parens balanced. (e) Data
+       Source/Database - connection form + 2 test buttons.
      - **Hafala Tools workspace**: (f) Contractor Info - one lookup form +
        one result card, (g) DL Groups - group picker + member table, (h)
        Overview - dashboard-style summary tiles, (i) Azure Cloud Sync -
