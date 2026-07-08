@@ -184,7 +184,21 @@ pick up immediately.
        placeholders, and Settings -> Access & Permissions still works
        after a full workspace round-trip - zero page errors, manifest
        (25 keys) + template both `json.loads()` clean, braces/parens
-       balanced. (g) DL Groups - group picker + member table, (h)
+       balanced. (g) **DONE (this session) - DL Groups** - group-name
+       input + Generate/Export buttons, a result card with a member
+       table (Display Name/Email/Title/Type/Enabled badge). Used
+       `sc-raw-table`/`sc-raw-thead`/`sc-raw-tr`/`sc-raw-th`/`sc-raw-tbody`/
+       `sc-raw-td` since the member list is `sc-for` nested in a table -
+       same regression-check discipline as item (c) Roles. Added `isDl`
+       (now excluded from `isHafalaOther` alongside `isCtr`) and ported
+       `DL_DATA` sample data + `genDl`/`exportDl` demo actions from the
+       real `index.html`. Verified with Playwright: input/empty-state
+       render, Generate populates the breakdown text and a 10-row table
+       (11 including header - confirms every row rendered, not just 1),
+       Noa Friedman correctly shows a "Disabled" badge, Export shows a
+       toast, Settings -> Access & Permissions still works after
+       switching workspaces - zero page errors, manifest (25 keys) +
+       template both `json.loads()` clean, braces/parens balanced. (h)
        Overview - dashboard-style summary tiles, (i) Azure Cloud Sync -
        status + run button + log list.
      - **System Team workspace**: (j) Password Expiry Report - one
