@@ -213,8 +213,21 @@ pick up immediately.
        (DL Groups/Contractor Info tabs, Settings->General's Customize
        card), Settings -> Access & Permissions still works afterward -
        zero page errors, manifest (25 keys) + template both
-       `json.loads()` clean, braces/parens balanced. (i) Azure Cloud
-       Sync - status + run button + log list.
+       `json.loads()` clean, braces/parens balanced. (i) **DONE (this
+       session) - Azure Cloud Sync** - Delta Synchronization card (Sync
+       Now button + a scrolling monospace log) and a Scheduler Status
+       card (next cycle/sync enabled/staging mode/interval). Ported the
+       real `index.html`'s scripted `runSync()` step sequence (10 timed
+       log lines over ~6s, ending "Sync cycle completed in 18.4s.").
+       **This completes the entire Hafala Tools workspace (f-i)** - all 4
+       of its pages now have real demo content, matching the "only-then-
+       do-System-Team" ordering in this plan. Verified with Playwright:
+       Delta Synchronization/Scheduler Status cards render, Sync Now
+       flips the button to "Syncing…" and streams log lines ending in
+       "Sync cycle completed", the button reverts to "Sync Now" after,
+       Settings -> Access & Permissions still works afterward - zero page
+       errors, manifest (25 keys) + template both `json.loads()` clean,
+       braces/parens balanced.
      - **System Team workspace**: (j) Password Expiry Report - one
        filterable table, (k) Audit Log - filterable table, similar shape,
        (l) Dashboard - health tiles + recent activity, (m) Event Viewer -
