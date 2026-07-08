@@ -228,8 +228,27 @@ pick up immediately.
        Settings -> Access & Permissions still works afterward - zero page
        errors, manifest (25 keys) + template both `json.loads()` clean,
        braces/parens balanced.
-     - **System Team workspace**: (j) Password Expiry Report - one
-       filterable table, (k) Audit Log - filterable table, similar shape,
+     - **System Team workspace**: (j) **DONE (this session) - Password
+       Expiry Report** - required introducing the System Team workspace's
+       own tab row (`SYSTEM_TABS`: Dashboard/User Management/Password
+       Expiry/Groups/Scheduled Jobs/Audit Log/Certificate Authority/
+       Diagnostics/Event Viewer, replacing the earlier single "not part
+       of the demo yet" placeholder for the whole workspace), same
+       incremental pattern as Hafala Tools' tab row - only Password
+       Expiry has real content, the other 8 show `isSystemOther`. Report
+       card (days-left description + Refresh/Export CSV buttons) + a
+       result table (Username/Display Name/OU/Days Left/Expires On) using
+       `sc-raw-table` aliases (nested `sc-for`, same regression-check
+       discipline as items (c)/(g)). Ported `PWEXP_DATA` + `genPwExp`/
+       `exportPwExp` from the real `index.html`. Verified with
+       Playwright: System Team tab row shows all 9 tabs, Password Expiry
+       is the default with the correct empty state, Refresh populates a
+       4-row table (5 including header - confirms every row rendered),
+       Export shows a toast, Dashboard (and by extension the other 7
+       unbuilt tabs) shows the placeholder, Settings -> Access &
+       Permissions still works after a full workspace round-trip - zero
+       page errors, manifest (25 keys) + template both `json.loads()`
+       clean, braces/parens balanced. (k) Audit Log - filterable table, similar shape,
        (l) Dashboard - health tiles + recent activity, (m) Event Viewer -
        filters (server/log/level/hours/query) + results table, (n)
        Scheduled Jobs - table with enable/disable/run-now actions, (o)
