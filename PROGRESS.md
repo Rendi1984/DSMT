@@ -65,8 +65,21 @@ pick up immediately.
      `state`/`titles`/`paletteIndex()` definitions (there are 21 items
      total vs. the 2 done so far - Access & Permissions, Settings->General):
      - **Settings sub-tabs** (reuse the card language already built - should
-       be fastest): (a) Connection (Demo/Live) - a couple of toggles/fields,
-       (b) Backup - export/restore buttons, no tables, (c) Roles - a
+       be fastest): (a) **DONE (this session) - Connection (Demo/Live)** -
+       "Backend connection" card with a Demo/Live segmented toggle
+       (`modeDemoStyle`/`modeLiveStyle`, same 2-segment pill pattern as the
+       real app's workspace switcher) - Live reveals an API base URL input
+       + "Test connection" button (fake `testApi()` demo action, sets
+       `apiStatus` idle/testing/ok after a timeout, matching the toast/
+       status-dot language already used elsewhere) + a monospace endpoint
+       reference card. Added `isConnection` binding (now excluded from
+       `isOther`, joining `isAccess`/`isGeneral`). Verified with Playwright:
+       clicking the Connection tab shows the card, the API base field and
+       endpoint reference only appear in Live mode, Test connection flips
+       the status dot to "Reachable", switching back to Demo hides the
+       field again, Access & Permissions still unaffected - zero page
+       errors, manifest (25 keys) + template both `json.loads()` clean,
+       braces/parens balanced. (b) Backup - export/restore buttons, no tables, (c) Roles - a
        permissions matrix table (reuse card + `sc-raw-table` pattern), (d)
        Secrets - list + add-form, same shape as the Local accounts list
        already redesigned, (e) Data Source/Database - connection form + 2
