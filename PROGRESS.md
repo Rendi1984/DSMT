@@ -199,8 +199,22 @@ pick up immediately.
        toast, Settings -> Access & Permissions still works after
        switching workspaces - zero page errors, manifest (25 keys) +
        template both `json.loads()` clean, braces/parens balanced. (h)
-       Overview - dashboard-style summary tiles, (i) Azure Cloud Sync -
-       status + run button + log list.
+       **DONE (this session) - Overview** - hero card (app name/
+       description/version/author) + a 2x2 grid of quick-link cards
+       (Azure Cloud Sync/DL Groups/Contractor Info/Settings), each
+       navigating directly to that page - the "Edit Config" real-app
+       card was retargeted to `goSettingsGeneral` (switches workspace to
+       Settings and jumps to the General tab, since this demo doesn't
+       have a separate top-level Config page). Made Overview the default
+       `hafalaTab` (matching the real app's `workspace: 'hafala', tab:
+       'overview'` default) instead of Contractor Info. Verified with
+       Playwright: Overview renders by default when switching to Hafala
+       Tools, all 4 quick-link cards navigate to their real destination
+       (DL Groups/Contractor Info tabs, Settings->General's Customize
+       card), Settings -> Access & Permissions still works afterward -
+       zero page errors, manifest (25 keys) + template both
+       `json.loads()` clean, braces/parens balanced. (i) Azure Cloud
+       Sync - status + run button + log list.
      - **System Team workspace**: (j) Password Expiry Report - one
        filterable table, (k) Audit Log - filterable table, similar shape,
        (l) Dashboard - health tiles + recent activity, (m) Event Viewer -
