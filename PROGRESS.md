@@ -128,8 +128,25 @@ pick up immediately.
        via the form appears in the list, Test bind and Rotate both show
        their toasts and Rotate updates the timestamp, Access & Permissions
        unaffected - zero page errors, manifest (25 keys) + template both
-       `json.loads()` clean, braces/parens balanced. (e) Data
-       Source/Database - connection form + 2 test buttons.
+       `json.loads()` clean, braces/parens balanced. (e) **DONE (this
+       session) - Data Source/Database** - connection status banner +
+       "Connection" card (engine/host/port, Windows/SQL auth toggle,
+       encrypt toggle, "Test server & list databases" with a fake
+       reachability check, existing-vs-new database picker, connection
+       string preview, "Test saved connection") + a 2-column
+       Schema/Maintenance card pair (Run migrations/Back up now demo
+       actions). Ported `DB_ENGINES`/`connString()` from the real
+       `index.html`. Verified with Playwright: Connection/Schema/
+       Maintenance cards render, switching Windows->SQL auth reveals the
+       username/password fields, Test server flips to "Reachable" and
+       reveals the database picker, Create database + Test saved
+       connection + Run migrations + Back up now + Save connection all
+       show their toasts, Access & Permissions unaffected - zero page
+       errors (confirmed the `[bundle] error` text present in
+       `innerText` is the same pre-existing headless-mode false-positive
+       documented for 3.30.0, not a regression - it's present even on
+       initial load before touching this tab), manifest (25 keys) +
+       template both `json.loads()` clean, braces/parens balanced.
      - **Hafala Tools workspace**: (f) Contractor Info - one lookup form +
        one result card, (g) DL Groups - group picker + member table, (h)
        Overview - dashboard-style summary tiles, (i) Azure Cloud Sync -
