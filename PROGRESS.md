@@ -91,8 +91,23 @@ pick up immediately.
        with Playwright: card + preview render, Export updates the
        timestamp and shows a toast, Import shows its own toast, Access &
        Permissions unaffected - zero page errors, manifest (25 keys) +
-       template both `json.loads()` clean, braces/parens balanced. (c) Roles - a
-       permissions matrix table (reuse card + `sc-raw-table` pattern), (d)
+       template both `json.loads()` clean, braces/parens balanced. (c)
+       **DONE (this session) - Roles** - a "Roles & permissions" card
+       with a permission matrix table (Capability rows x Sys
+       Admin/Operator/Helpdesk/Read-only columns, checkmark/dash cells
+       colored via `t.green`/`t.textDim`). Used
+       `sc-raw-table`/`sc-raw-thead`/`sc-raw-tr`/`sc-raw-th`/`sc-raw-tbody`/
+       `sc-raw-td` throughout since the matrix is doubly-nested `sc-for`
+       (rows x cells) - the exact shape that triggered the systemic
+       table-rendering bug fixed in 3.32.3, so this was a deliberate
+       regression check, not just copy-paste. Added static `ROLE_COLS`/
+       `MATRIX` data (ported from the real index.html) and `isRoles`
+       binding (now excluded from `isOther`). Verified with Playwright:
+       card + all 5 column headers + 6 capability rows render, checkmark
+       count matches expected (14 for the current MATRIX data - confirms
+       every row rendered, not just 1), Access & Permissions unaffected -
+       zero page errors, manifest (25 keys) + template both `json.loads()`
+       clean, braces/parens balanced. (d)
        Secrets - list + add-form, same shape as the Local accounts list
        already redesigned, (e) Data Source/Database - connection form + 2
        test buttons.
