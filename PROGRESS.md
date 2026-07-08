@@ -79,7 +79,19 @@ pick up immediately.
        the status dot to "Reachable", switching back to Demo hides the
        field again, Access & Permissions still unaffected - zero page
        errors, manifest (25 keys) + template both `json.loads()` clean,
-       braces/parens balanced. (b) Backup - export/restore buttons, no tables, (c) Roles - a
+       braces/parens balanced. (b) **DONE (this session) - Backup** -
+       "Configuration backup" card with Export/Import buttons (SVG icons,
+       matches the mockup's icon language) + a "last export" timestamp,
+       plus a second card showing a live JSON `configPreview` (from a new
+       demo-only `buildConfig()` that serializes palette/theme/mfa/sso/
+       mappings/locals). `exportConfig()` sets `lastExport` + shows a
+       toast; `importConfig()` is a no-op demo toast (no real file I/O in
+       this offline demo). Added `isBackup` binding (now excluded from
+       `isOther`, joining `isAccess`/`isGeneral`/`isConnection`). Verified
+       with Playwright: card + preview render, Export updates the
+       timestamp and shows a toast, Import shows its own toast, Access &
+       Permissions unaffected - zero page errors, manifest (25 keys) +
+       template both `json.loads()` clean, braces/parens balanced. (c) Roles - a
        permissions matrix table (reuse card + `sc-raw-table` pattern), (d)
        Secrets - list + add-form, same shape as the Local accounts list
        already redesigned, (e) Data Source/Database - connection form + 2
