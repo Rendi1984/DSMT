@@ -147,8 +147,44 @@ pick up immediately.
        documented for 3.30.0, not a regression - it's present even on
        initial load before touching this tab), manifest (25 keys) +
        template both `json.loads()` clean, braces/parens balanced.
-     - **Hafala Tools workspace**: (f) Contractor Info - one lookup form +
-       one result card, (g) DL Groups - group picker + member table, (h)
+     - **Hafala Tools workspace**: (f) **DONE (this session) - Contractor
+       Info** - required introducing a top-level **workspace switcher**
+       (Settings / Hafala Tools / System Team) in the aside, since this
+       page lives outside Settings entirely, unlike (a)-(e). Added
+       `WORKSPACES` + a workspace-pill list in the aside, wrapped the
+       existing Settings tabs-row/content in a new `isSettingsWs` guard,
+       and added sibling `isHafalaWs` (with its own `HAFALA_TABS` pill
+       row - Overview/Sync/DL/Contractor, only Contractor real so far,
+       rest placeholder same as the original Settings-tabs pattern) and
+       `isSystemWs` (single placeholder card, no tabs yet - its pages are
+       items (j)-(r), later) blocks. Header title/subtitle are now
+       dynamic (`pageTitle`/`pageSubtitle`) based on workspace/tab instead
+       of a hardcoded "Settings". Contractor Info itself: username input +
+       Generate button, Detection/Account/Verdict/Juniper-servers result
+       cards, ported `DIR` sample data + `buildContractor()` logic from
+       the real `index.html`. **Bug hit and fixed during this item**: the
+       first version nested the new `isHafalaWs`/`isSystemWs` blocks
+       *inside* `isSettingsWs`'s own `<sc-if>` because the insertion
+       anchor was actually the closing tag of the innermost child
+       (`isOther`), not of `isSettingsWs` itself - so switching to Hafala
+       Tools/System Team rendered a completely empty content area (0
+       page errors, valid JSON, balanced braces - none of the usual
+       checks catch a wrong-level sc-if nesting). Caught by the
+       Playwright test actually asserting Hafala tab content appears,
+       not just that the page loads - fixed by adding the missing
+       `</sc-if>` to properly close `isSettingsWs` before the sibling
+       blocks start. Lesson for future workspace-switcher-style edits:
+       when wrapping existing content in a new `sc-if`, explicitly find
+       and close that SAME wrapper's own end tag, not a descendant's.
+       Verified with Playwright after the fix: workspace switcher visible,
+       Hafala tab row appears with Contractor Info selected by default,
+       Generate produces correct Detection/Verdict/Juniper output for
+       `rlevi-Support` (OK, in expected Support OU) and `guest01` (WARNING,
+       not in any expected OU), Overview/System Team show their
+       placeholders, and Settings -> Access & Permissions still works
+       after a full workspace round-trip - zero page errors, manifest
+       (25 keys) + template both `json.loads()` clean, braces/parens
+       balanced. (g) DL Groups - group picker + member table, (h)
        Overview - dashboard-style summary tiles, (i) Azure Cloud Sync -
        status + run button + log list.
      - **System Team workspace**: (j) Password Expiry Report - one
