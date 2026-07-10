@@ -335,8 +335,20 @@ pick up immediately.
        expected toast, Settings -> Access & Permissions still works after
        a full workspace round-trip - zero page errors, manifest (25 keys)
        + template both `json.loads()` clean, braces/parens balanced.
-       (o)
-       Groups - membership management + bulk actions, (p) User Management -
+       (o) **DONE (this session) - Groups** - 2-column layout: group
+       list on the left (highlighted row for the selected group) and a
+       member list + "+ Add member"/remove-member on the right. Ported
+       `GROUPS` (6 groups) + `members` sample data and `selectGroup`/
+       `addMember`/`removeMember` from the real `index.html`; reused the
+       existing `initials()` helper (already built for Local accounts).
+       Verified with Playwright: all 6 groups render with the default
+       group's members shown, selecting a different group updates the
+       header + meta text, Add member shows a toast, removing a member
+       shows a toast and the row disappears, Settings -> Access &
+       Permissions still works after a full workspace round-trip - zero
+       page errors, manifest (25 keys) + template both `json.loads()`
+       clean, braces/parens balanced.
+       (p) User Management -
        full CRUD table, multi-select, offboarding flow (busiest page), (q)
        Certificate Authority - cert lifecycle table + templates +
        issue/renew/revoke actions, (r) Diagnostics - 2 sub-tabs (Domain
