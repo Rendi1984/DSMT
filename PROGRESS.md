@@ -388,9 +388,43 @@ pick up immediately.
        Access & Permissions still works after a full workspace round-trip
        - zero page errors, manifest (25 keys) + template both
        `json.loads()` clean, braces/parens balanced.
-       (r) Diagnostics - 2 sub-tabs (Domain
-       Controllers / Exchange), each with its own test/send panel (most
-       moving parts).
+       (r) **DONE (this session) - Diagnostics** - 2 sub-tabs (Domain
+       Controllers / Exchange), each a card with its own discovery
+       input + Run/Check button and a per-host results list (service
+       badges colored by status). Ported `DC_SERVICES`/`EX_SERVICES` +
+       `runDcCheck`/`runExCheck` from the real `index.html`. Deliberately
+       skipped the real app's nested "Send a test message" SMTP simulator
+       toggle inside Exchange (a secondary feature beyond the plan's
+       "test/send panel" ask, which the Exchange service-check panel
+       itself already satisfies) - can be added later as its own item if
+       wanted. **This completes all 9 System Team pages (j-r) and all 21
+       page-content items in the rollout plan** - remaining work is only
+       the global-chrome items (s)-(u) and the final palette-wiring pass.
+       **Bug hit and fixed during this item**: `runExCheck`'s host-split
+       regex `/[,;\n]+/` needs a literal backslash-n in the decoded JS,
+       but since the whole `__bundler/template` blob is itself a JSON
+       string, writing the file's raw text as `\n` (2 chars) gets
+       JSON-decoded into an actual newline character, not a literal
+       backslash-n - producing `SyntaxError: Invalid regular expression:
+       missing /` at runtime (a real error, not the harmless headless-
+       only `[bundle] error` false positive - confirmed by checking the
+       actual console message, not just the placeholder div's presence).
+       Fixed by writing `\\n` (3 chars: backslash-backslash-n) in the raw
+       file text so JSON-decoding produces the intended 2-char `\n`.
+       Caught by the Playwright test failing to even find the sign-in
+       button (nothing rendered) - worth remembering for future edits:
+       any regex or JS string that needs a literal backslash in this file
+       needs one extra backslash beyond what "feels right", since every
+       edit here is really editing pre-JSON-encoded text, not final JS
+       source. Verified with Playwright after the fix: Domain Controllers
+       is the default sub-tab, Run check shows both demo DCs with DC02
+       correctly flagged as degraded (6/7 running), switching to Exchange
+       and running Check host(s) shows results with all 8 service rows,
+       an empty host field shows the expected warning toast, switching
+       back to Domain Controllers preserves its prior results, Settings
+       -> Access & Permissions still works after a full workspace
+       round-trip - zero page errors, manifest (25 keys) + template both
+       `json.loads()` clean, braces/parens balanced.
      - **Global chrome** (touches everything, do last among the structural
        passes): (s) Sign-in screen (Demo/Live toggle, domain picker, MFA
        step), (t) the full workspace switcher + sidebar (Hafala Tools <->
