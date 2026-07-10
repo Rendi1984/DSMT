@@ -320,8 +320,22 @@ pick up immediately.
        -> Access & Permissions still works after a full workspace
        round-trip - zero page errors, manifest (25 keys) + template both
        `json.loads()` clean, braces/parens balanced.
-       (n)
-       Scheduled Jobs - table with enable/disable/run-now actions, (o)
+       (n) **DONE (this session) - Scheduled Jobs** - a single result
+       table (Job/Schedule/Last run/Next run/Status/Enabled toggle/Run
+       now button) using `sc-raw-table` aliases, no filter/query step
+       needed (matches the real app - jobs are always all shown).
+       Ported the 6-job sample data + `jobToggle`/`jobRun` from the real
+       `index.html`; `jobRun` also updates that row's "Last run" to
+       "just now" for visible feedback (previously just a toast in the
+       real app - the extra state update was a bug-fix pattern reused
+       from the DB-creation feedback fix this session, applied
+       proactively here). Verified with Playwright: all 6 jobs render (7
+       rows including header - confirms every row rendered), Run now
+       shows a toast and updates "Last run", toggling Enabled shows the
+       expected toast, Settings -> Access & Permissions still works after
+       a full workspace round-trip - zero page errors, manifest (25 keys)
+       + template both `json.loads()` clean, braces/parens balanced.
+       (o)
        Groups - membership management + bulk actions, (p) User Management -
        full CRUD table, multi-select, offboarding flow (busiest page), (q)
        Certificate Authority - cert lifecycle table + templates +
