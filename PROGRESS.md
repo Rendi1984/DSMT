@@ -293,7 +293,22 @@ pick up immediately.
        Access & Permissions still works after a full workspace round-trip
        - zero page errors, manifest (25 keys) + template both
        `json.loads()` clean, braces/parens balanced.
-       (l) Dashboard - health tiles + recent activity, (m) Event Viewer -
+       (l) **DONE (this session) - Dashboard** - a 3x2 grid of stat
+       tiles (Domain controllers/AD Connect sync/Locked accounts/Failed
+       logons/Pending PW resets/Scheduled jobs), a Service health card
+       (5 rows with status dot + halo + Re-check button) and a Recent
+       Activity card (top 5 `AUDIT` entries, reusing the data ported for
+       item (k)). Made Dashboard the default `systemTab` (matching the
+       real app's `workspace: 'system', tab: 'dashboard'` default,
+       mirroring the same fix applied to Hafala Tools' Overview in item
+       (h)) instead of Password Expiry. Verified with Playwright:
+       Dashboard renders by default when switching to System Team (tiles/
+       health/recent-activity all present), Re-check shows the expected
+       toast, Password Expiry still works after Dashboard became the
+       default, Settings -> Access & Permissions still works after a full
+       workspace round-trip - zero page errors, manifest (25 keys) +
+       template both `json.loads()` clean, braces/parens balanced.
+       (m) Event Viewer -
        filters (server/log/level/hours/query) + results table, (n)
        Scheduled Jobs - table with enable/disable/run-now actions, (o)
        Groups - membership management + bulk actions, (p) User Management -
