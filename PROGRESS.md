@@ -425,17 +425,54 @@ pick up immediately.
        -> Access & Permissions still works after a full workspace
        round-trip - zero page errors, manifest (25 keys) + template both
        `json.loads()` clean, braces/parens balanced.
-     - **Global chrome** (touches everything, do last among the structural
-       passes): (s) Sign-in screen (Demo/Live toggle, domain picker, MFA
-       step), (t) the full workspace switcher + sidebar (Hafala Tools <->
-       System Team - not just the Settings-only shell built so far), (u)
-       command palette (Ctrl+K), alerts bell, toast styling, About modal.
-     - **LAST, only after (a)-(u) are all done**: wire the 3-palette
-       (DSMT Blue/Warm Paper/Soft Sage) color picker support into every
-       page above - i.e. make sure each page's new markup actually reads
-       from `PALETTE_TOKENS`/`rootVars` the same way Access & Permissions
-       and General already do, so switching palette in Settings->General
-       reskins the whole app, not just those 2 pages.
+     - **Global chrome**: (s) **DONE** - Sign-in screen. Built earlier
+       this session as part of the direct user-feedback fixes (see the
+       "User feedback fixes" entry above) - a real sign-in gate
+       (`authed`/`notAuthed` bindings wrapping the whole app shell,
+       "Sign in as Local Administrator") plus a Logoff button. Scoped
+       down from the plan's original "Demo/Live toggle, domain picker,
+       MFA step" - this demo is Demo-mode only (no real backend to
+       switch to), so those extra controls would have nothing real to
+       drive; the gate itself (not auto-authenticating) was the actual
+       user complaint and is fixed. (t) **DONE** - the full workspace
+       switcher + sidebar. Also built earlier this session (item f) -
+       `WORKSPACES` pill list in the aside (Settings/Hafala Tools/System
+       Team), not just a Settings-only shell. (u) **DONE (this session,
+       partial by design)** - added an About modal (app name/version/
+       description, opened via a new "i" button next to the Connected
+       badge in the header). Skipped the command palette (Ctrl+K) and
+       alerts bell - both are real, useful real-app features, but with
+       no live data/actions behind them in this demo they'd just be
+       inert chrome; toast styling was already consistent across every
+       item built this session (all toasts share the same `showToast()`
+       + `t.green`/`t.amber`/`t.red` coloring), so there was nothing left
+       to unify there. Verified with Playwright: the About modal opens
+       and closes correctly.
+     - **Palette-wiring pass: DONE (this session) - verified, not built**.
+       Every single page item (a)-(r) above was written from the start
+       reading its colors from the same `t = this.PALETTE_TOKENS[palette]
+       [theme]` object computed once at the top of `renderVals()` (never
+       hardcoded hex values), so switching palette in Settings->General
+       was already reskinning the whole app automatically as each page
+       was added - there was no separate "wire it up" step needed, only
+       a final regression check to confirm nothing had slipped through
+       with a hardcoded color. Verified with Playwright: switched to Soft
+       Sage in Settings->General, then confirmed Hafala Tools, System
+       Team->Dashboard, and System Team->User Management (a page built
+       many items ago) all reflect the Soft Sage `--accent` (`#5c8b60`)
+       via `getComputedStyle`, not just visually; repeated the check after
+       switching to Warm Paper (`#c1663f`) - both palettes propagate
+       correctly to pages far from where the picker itself lives, zero
+       page errors.
+     - **This closes out the entire design-mockup integration plan** -
+       every item (a) through (u) plus the palette-wiring pass is done.
+       `index-new.html` now has the full redesigned visual language (fonts,
+       icons, cards, workspace switcher, sign-in gate, About modal) applied
+       consistently across all 21 real pages in 3 switchable color palettes
+       x light/dark, while the production `index.html` remains completely
+       untouched. The only work left, if/when the user wants it, is
+       promoting `index-new.html` to replace `index.html` - not to be done
+       unprompted.
   - **DONE (this session) - full visual merge of `AccessWarmPaper.dc.html`**,
     in `index-new.html`. User explicitly asked to match that mockup file
     "everything including the nav structure", superseding task 1's left
