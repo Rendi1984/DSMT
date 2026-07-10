@@ -458,6 +458,13 @@ pick up immediately.
        badge, the alerts panel opens showing the expiring-cert item,
        Clear all empties it, and the Logoff button's DOM now contains an
        `<svg>` icon instead of the power glyph - zero page errors,
+       manifest (25 keys) + template both `json.loads()` clean, braces/
+       parens balanced. **Follow-up fix (same session)**: user noticed
+       the bell (34x34px) and About "i" button (26x26px) were mismatched
+       sizes - unified both to 28x28px circular buttons (bell's inner SVG
+       shrunk 17px->14px to match). Verified via Playwright
+       `boundingBox()` on both buttons (not just visually) - confirmed
+       exact size match,
        manifest (25 keys) + template both `json.loads()` clean,
        braces/parens balanced.
      - **Palette-wiring pass: DONE (this session) - verified, not built**.
