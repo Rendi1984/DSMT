@@ -7,10 +7,121 @@ useful context under "Notes" so a fresh session (with no chat history) can
 pick up immediately.
 
 ## Current version
-3.34.0 (index-new.html preview) / 3.32.3 (shipped index.html console) — see
+3.35.0 (index-new.html preview) / 3.32.3 (shipped index.html console) — see
 `CHANGELOG.md` for the authoritative log.
 
 ## Open tasks
+- **vCenter/ESXi integration + specific error messages + install-process
+  review (this session)**: user asked for (1) connecting to vCenter/ESXi to
+  pull user lists + permission types into a dedicated tab, with thought
+  given to how to store historical data/reports for fast future retrieval,
+  (2) clear/specific error messages instead of generic ones when something
+  fails, (3) a re-review of the install process (script + browser wizard)
+  for fixes/improvements, and (4) simplifying wherever possible. The
+  `AskUserQuestion` tool failed twice with a permission-stream error this
+  session (infrastructure issue, not a user action) — proceeded on stated
+  reasonable defaults (username/password auth like Secrets' DPAPI pattern,
+  support multiple vCenter/ESXi connections, real SQL history table) and
+  flagged them to the user rather than blocking. Delivered all four,
+  `index.html` untouched:
+  - **vCenter/ESXi integration**: new `VMware.psm1` using VMware PowerCLI
+    (`Connect-VIServer`/`Get-VIPermission`) — deliberately NOT a hand-rolled
+    SOAP/REST client against vSphere; PowerCLI is what VMware itself
+    publishes and supports, hand-rolling that protocol would be slower,
+    more fragile, and unsupported. New `dbo.VCenterConnections` (server,
+    username, DPAPI-encrypted password cipher, enabled flag, per-connection
+    "allow untrusted certificate" opt-in, last-sync status) and
+    `dbo.VCenterPermissions` (one row per principal+entity **per sync run**,
+    grouped by a `SyncId` GUID) tables. **History was a first-class design
+    requirement**, not an afterthought: every sync inserts a brand new
+    timestamped snapshot rather than overwriting the previous one, so past
+    pulls stay queryable (`GET .../history` lists every past `SyncId` with
+    a count and timestamp) without re-hitting vCenter — this directly
+    answers the "how to store data for fast future retrieval" question.
+    New System Team → "vCenter / ESXi" tab: add connection(s), Sync now,
+    Enable/Disable, Remove, a permissions table per connection (principal /
+    role / entity / propagate). New API routes:
+    `GET/POST/DELETE /api/vcenter/connections`,
+    `POST /api/vcenter/connections/:id/{toggle,sync}`,
+    `GET /api/vcenter/connections/:id/{permissions,history}`.
+  - **TLS certificate validation caught by the auto-mode security
+    classifier**: an early draft of `VMware.psm1` defaulted to
+    `Set-PowerCLIConfiguration -InvalidCertificateAction Ignore`, silently
+    disabling TLS cert validation for every vCenter connection — the
+    permission system correctly blocked this as an unrequested security
+    tradeoff. Fixed to validate certificates by default; skipping
+    validation is now a per-connection, explicit opt-in switch
+    (`AllowUntrustedCert` column + console toggle), never a blanket
+    default — worth remembering as a pattern for any future integration
+    that talks TLS to a self-hosted service.
+  - **Specific, actionable error messages**: rewrote `apiFetch` (the single
+    function nearly every Live-mode action goes through) to classify
+    failures instead of surfacing raw browser text: a 15-second
+    `AbortController` timeout distinguishes "server is slow/hung" from
+    "server is down"; a bare network failure now names the API base URL
+    and suggests concrete checks (server running? address/port right?
+    firewall/CORS?); 401 vs 403 get distinct messages (session expired vs.
+    role not authorized); a non-JSON response names the endpoint instead of
+    throwing an opaque parse error. Verified via Playwright against Settings
+    → Connection → Test connection in Live mode with no real server: shows
+    "Could not reach the API at http://localhost:8780 - check the server is
+    running, the address/port are correct, and there is no firewall or CORS
+    block between this browser and it." instead of a bare "Failed to fetch".
+  - **Install-process review found real, confirmed-dead configuration**:
+    `Api.CorsOrigins` (the API's CORS middleware hardcodes
+    `Access-Control-Allow-Origin: *` and has never read this field),
+    `Api.RequireMfa`/`Api.AllowSsoSignIn` (superseded by the real MFA/SSO
+    built in 3.33.0 — real MFA lives on `dbo.LocalAccounts.MfaEnabled`,
+    real SSO on `Config.Directory.SsoEnabled`), and the matching
+    `dbo.Config` seed rows `RequireSecurityGroup`/`AccessSecurityGroup`/
+    `RequireMfa`/`AllowSsoSignIn` (leftovers from the pre-3.32.0
+    access-control design that PROGRESS.md already documented as replaced,
+    but the seed data was never cleaned out). Confirmed dead by grepping
+    for every read site across `DSMT_Api.ps1`/`*.psm1` — zero matches for
+    any of them outside the write/seed sites themselves. **This was
+    actively misleading, not just unused**: `README.md` and
+    `Deployment_Guide.html` both told admins troubleshooting CORS errors to
+    edit `Api.CorsOrigins` and restart the service — advice that would
+    have wasted their time since editing it does nothing. Removed the
+    writes from `Install-DSMT.ps1`, removed the seeds from `schema.sql`
+    (existing installs keep whatever rows they already have — `MERGE
+    WHEN NOT MATCHED` only stops adding new ones), removed the field from
+    `config.sample.json`, and rewrote every CORS-troubleshooting passage in
+    `README.md`/`Deployment_Guide.html` to state the actual behavior
+    (always `*`, nothing to configure). Also fixed
+    `HKLM:\SOFTWARE\DSMT\Version` in `Install-DSMT.ps1`, which was
+    hardcoded to a stale `3.28.0` regardless of what version was actually
+    being installed — bumped to match this release; **flagging for future
+    sessions that this literal needs to be bumped on every release that
+    touches the installer**, the same way `CLAUDE.md` already tracks the
+    6-place `index.html` version literal.
+  - **Noted but NOT changed (flagged for a future session, too large/risky
+    for this pass)**: `Install.ps1` (documented "manual/granular" path) and
+    `Install-DSMT.ps1` (one-click all-in-one) contain a ~30-line verbatim
+    duplicate of the native Windows-service C# host source and the same
+    URL-ACL-reservation logic. Both are intentionally documented, supported
+    install paths (README.md/Deployment_Guide.html both reference
+    `Install.ps1` deliberately, not as legacy cruft) — de-duplicating them
+    would mean introducing a shared module/include file and touching both
+    documented flows, which is a real simplification but a bigger, riskier
+    change than fit in this pass.
+  - Verified: `VMware.psm1`/`DSMT_Api.ps1`/`Install-DSMT.ps1`/`schema.sql`
+    ASCII + brace-balance checked (Install-DSMT.ps1's raw paren count is a
+    known false-positive from embedded C# source/prose in comments —
+    confirmed present in git HEAD *before* this session's edits too, not
+    something introduced now). `index-new.html` manifest + template both
+    `json.loads()` clean, class-body braces balanced, full Playwright
+    regression across all sub-tabs of all 3 workspaces (zero errors),
+    targeted vCenter tab test (add connection, sync, permissions table
+    render) in Demo mode — zero errors.
+  - Version bumped to 3.35.0 (index-new.html's single About-modal string).
+  - **Caveat for next session**: same as prior sessions — wired into
+    `index-new.html` only, not the shipped `index.html`. VMware PowerCLI
+    calls (`Connect-VIServer`, `Get-VIPermission`) could not be exercised
+    against a real vCenter/ESXi server in this sandbox — verified by code
+    review only. Recommend testing an actual sync against a real vCenter
+    after deploying, including the "PowerCLI not installed" error path and
+    the self-signed-certificate toggle.
 - **SMTP settings + extended DC diagnostics + scheduled email reports (this
   session)**: user asked to (1) persist an SMTP address somewhere sensible
   instead of retyping it, (2) send a real test email from Diagnostics using

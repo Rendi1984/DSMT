@@ -173,10 +173,6 @@ if (-not $Domains -or $Domains.Count -eq 0) {
 $ApiPort      = [int](Ask "API port" $ApiPort)
 if (-not $SkipFrontend) { $FrontendPort = [int](Ask "Console (IIS) port" $FrontendPort) }
 
-# CORS origin: lock to the console URL if frontend is hosted, else allow all.
-if ($SkipFrontend) { $ConsoleUrl = "*" }
-else { $ConsoleUrl = "http://localhost:$FrontendPort" }
-
 # ===========================================================================
 # Deploy program files to a permanent location, so the service never runs from
 # a temp/copy folder (which Windows may clean up). Everything below this point
@@ -267,9 +263,13 @@ if (-not $SkipPrereqs) {
 Step "Write config.json"
 $cfg = [ordered]@{
     Api = [ordered]@{
+        # No CorsOrigins field - the API always answers CORS preflights with
+        # Access-Control-Allow-Origin: * (see DSMT_Api.ps1's CORS middleware),
+        # since the console is a self-contained offline HTML file that can be
+        # opened from any origin; a per-install allow-list would be unused
+        # config that looks like it does something but doesn't.
         ListenAddress = "0.0.0.0"; Port = $ApiPort; Protocol = "http"
-        CorsOrigins = @($ConsoleUrl); TokenTtlHours = 8
-        RequireMfa = $false; AllowSsoSignIn = $false; CertThumbprint = ""
+        TokenTtlHours = 8; CertThumbprint = ""
     }
     Database = [ordered]@{
         Engine = "SQL Server"; Server = $SqlServer; Port = $SqlPort; Name = $DbName
@@ -296,7 +296,7 @@ Step "Write registry metadata (HKLM:\SOFTWARE\DSMT)"
 try {
     if (-not (Test-Path 'HKLM:\SOFTWARE\DSMT')) { New-Item -Path 'HKLM:\SOFTWARE\DSMT' -Force | Out-Null }
     Set-ItemProperty -Path 'HKLM:\SOFTWARE\DSMT' -Name 'InstallDir'   -Value $InstallDir
-    Set-ItemProperty -Path 'HKLM:\SOFTWARE\DSMT' -Name 'Version'      -Value '3.28.0'
+    Set-ItemProperty -Path 'HKLM:\SOFTWARE\DSMT' -Name 'Version'      -Value '3.35.0'
     Set-ItemProperty -Path 'HKLM:\SOFTWARE\DSMT' -Name 'ApiPort'      -Value $ApiPort
     Set-ItemProperty -Path 'HKLM:\SOFTWARE\DSMT' -Name 'FrontendPort' -Value $FrontendPort
     Set-ItemProperty -Path 'HKLM:\SOFTWARE\DSMT' -Name 'ConfigPath'   -Value $cfgPath

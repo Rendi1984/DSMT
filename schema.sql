@@ -108,18 +108,61 @@ CREATE TABLE dbo.Sessions (
 );
 GO
 
+/* ---- vCenter / ESXi connections + permission snapshots ---- */
+/* Password is DPAPI-encrypted (Secrets.psm1's Protect-Secret/Unprotect-Secret),
+   same as every other credential this app stores - never plain text. */
+IF OBJECT_ID('dbo.VCenterConnections') IS NULL
+CREATE TABLE dbo.VCenterConnections (
+    Id           INT IDENTITY(1,1) PRIMARY KEY,
+    Server       NVARCHAR(256) NOT NULL UNIQUE,
+    Username     NVARCHAR(256) NOT NULL,
+    PasswordCipher NVARCHAR(1024) NOT NULL,
+    Enabled      BIT           NOT NULL DEFAULT 1,
+    AllowUntrustedCert BIT     NOT NULL DEFAULT 0,  -- explicit opt-in only, e.g. self-signed lab certs
+    LastSyncAt   DATETIME2     NULL,
+    LastResult   NVARCHAR(32)  NULL,      -- 'Success' | 'Error'
+    LastDetail   NVARCHAR(1024) NULL,
+    CreatedAt    DATETIME2     NOT NULL DEFAULT SYSUTCDATETIME()
+);
+GO
+
+/* One row per (connection, sync run, principal+entity) - a full permission
+   snapshot each sync, timestamped, so past syncs stay queryable for trend/
+   audit purposes instead of only ever showing the latest state. */
+IF OBJECT_ID('dbo.VCenterPermissions') IS NULL
+CREATE TABLE dbo.VCenterPermissions (
+    Id           BIGINT IDENTITY(1,1) PRIMARY KEY,
+    ConnectionId INT           NOT NULL,
+    SyncId       UNIQUEIDENTIFIER NOT NULL,   -- groups all rows from the same sync run
+    Principal    NVARCHAR(256) NOT NULL,
+    Role         NVARCHAR(128) NOT NULL,
+    Entity       NVARCHAR(512) NOT NULL,
+    EntityType   NVARCHAR(64)  NULL,
+    Propagate    BIT           NOT NULL DEFAULT 0,
+    IsGroup      BIT           NOT NULL DEFAULT 0,
+    CapturedAt   DATETIME2     NOT NULL DEFAULT SYSUTCDATETIME()
+);
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_VCenterPermissions_Sync' AND object_id = OBJECT_ID('dbo.VCenterPermissions'))
+CREATE INDEX IX_VCenterPermissions_Sync ON dbo.VCenterPermissions(ConnectionId, SyncId, CapturedAt DESC);
+GO
+
 /* ---- Seed defaults (idempotent) -------------------------- */
+/* RequireSecurityGroup/AccessSecurityGroup/RequireMfa/AllowSsoSignIn were
+   removed from this seed list (3.35.0) - leftovers from the pre-3.32.0
+   access-control design that nothing in DSMT_Api.ps1 has read since the
+   single-list redesign (RequireSecurityGroup/AccessSecurityGroup) and the
+   real MFA/SSO implementation (RequireMfa/AllowSsoSignIn -> superseded by
+   dbo.LocalAccounts.MfaEnabled and Config.Directory.SsoEnabled). Existing
+   installs keep whatever rows they already have - this only stops NEW
+   installs from getting dead, misleading keys. */
 MERGE dbo.Config AS t
 USING (VALUES
     ('SchemaVersion','15'),
     ('ADConnectServer','ADC-SYNC-01'),
-    ('RequireSecurityGroup','true'),
-    ('AccessSecurityGroup','SG-DSMT-Access'),
     ('ContractorExpectedAdminOU','OU=AdminAccounts,OU=Companies,DC=lab,DC=local'),
     ('ContractorExpectedSupportOU','OU=SupportAccounts,OU=Companies,DC=lab,DC=local'),
     ('CaConfigString','CA-01.lab.local\lab-Enterprise-CA'),
-    ('RequireMfa','false'),
-    ('AllowSsoSignIn','false'),
     ('SecretProvider','Windows DPAPI (machine)')
 ) AS s([Key],[Value])
 ON t.[Key] = s.[Key]

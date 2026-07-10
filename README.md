@@ -191,8 +191,11 @@ Invoke-RestMethod http://localhost:8780/api/health
 4. Sign out and back in — you're now driving the real domain.
 
 **HTTPS / production:** put the API behind IIS with **Windows Authentication** and an
-HTTPS binding, or give Pode a cert (`Api.Protocol=https`, `Api.CertThumbprint`). Restrict
-`Api.CorsOrigins` to the exact URL that serves the HTML.
+HTTPS binding, or give Pode a cert (`Api.Protocol=https`, `Api.CertThumbprint`). The API
+always answers CORS preflights with `Access-Control-Allow-Origin: *` (there is no
+per-install allow-list to restrict - the console is a self-contained offline file that can
+be opened from any origin) - lock down access with Windows Authentication / network
+placement instead of CORS.
 
 ---
 
@@ -216,9 +219,10 @@ To reach DSMT by hostname, or from a different computer than the one running it:
    internal DNS is inconsistent (see the `sql01` vs `sql01.lab.local` note above — the
    same class of issue applies to the app server's own name), use the IP address
    instead, or fix the DNS suffix search list on the client.
-5. `Api.CorsOrigins` in `config.json` defaults to `["*"]`, so it will not block a
-   remote browser. Restrict it to the exact console URL only once you've confirmed
-   remote access works, per the production checklist below.
+5. **CORS**: the API always answers with `Access-Control-Allow-Origin: *`, so it will
+   never block a remote browser - if you're still seeing a CORS-looking error, it's
+   almost always actually one of the network/DNS issues above surfacing as a failed
+   request the browser reports as a CORS failure.
 
 **Simpler alternative — single URL for everyone:** put IIS in front of the API as a
 reverse proxy (see `iis-reverse-proxy.web.config` at the project root, and the
