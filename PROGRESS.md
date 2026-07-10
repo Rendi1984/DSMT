@@ -7,9 +7,85 @@ useful context under "Notes" so a fresh session (with no chat history) can
 pick up immediately.
 
 ## Current version
-3.32.3 (API + Console) — see `CHANGELOG.md` for the authoritative log.
+3.33.0 (index-new.html preview) / 3.32.3 (shipped index.html console) — see
+`CHANGELOG.md` for the authoritative log.
 
 ## Open tasks
+- **Enter-to-submit + real MFA/SSO on index-new.html (this session)**: user
+  asked for (1) pressing Enter on the sign-in form instead of requiring a
+  button click, (2) audit logging strategy (answered: keep the existing
+  SQL-backed `dbo.AuditLog` / `Write-Audit` as the source of truth — it
+  already covers "every action", confirmed by reading `DSMT_Api.ps1`; no new
+  logging mechanism was needed), and (3) real SSO (Windows Integrated Auth)
+  + MFA (TOTP) with enable/disable toggles and logging. Delivered all three,
+  `index.html` untouched:
+  - **Enter-to-submit**: the sign-in screen previously had NO real input
+    fields at all — username/password were hardcoded display text
+    ("administrator" / bullet dots), so Live-mode sign-in silently always
+    sent `administrator`/`admin` regardless of what a real deployment
+    needed. Replaced with real `<input>` fields (`oninput` -> state,
+    `onkeydown` Enter -> `signIn()`), fixing both the requested Enter-key
+    behavior and this pre-existing correctness bug in one pass.
+  - **MFA (TOTP, RFC 6238)**: `Auth.psm1` gained a self-contained
+    implementation (`New-TotpSecret`/`Get-TotpCode`/`Test-TotpCode`/
+    `Get-TotpUri` — Base32 + HMAC-SHA1, no external module; algorithm
+    verified against the official RFC 6238 test vector via a parallel
+    Python implementation before trusting the PowerShell port). Protects
+    the local break-glass administrator account specifically (domain
+    sign-in unaffected — the existing UI copy claiming "domain users need
+    MFA, local accounts exempt" was inverted to match what was actually
+    buildable without a new per-domain-user secret store; copy text was
+    corrected to describe local-account protection instead of silently
+    diverging from the code). New `dbo.LocalAccounts` columns
+    `MfaEnabled`/`MfaSecret` via idempotent `ALTER TABLE` in `schema.sql`
+    (safe on existing installs via `Invoke-DbMigrate`). New routes:
+    `POST /api/auth/mfa/setup` (issue secret + otpauth URI, not yet
+    active), `/enable` (verify a code, THEN activate — avoids locking
+    someone out with an unsaved secret), `/disable`. `POST /api/auth/login`
+    now accepts `mfaCode` and returns `{ mfaRequired: true }` (never a bare
+    401) when the password was correct but a code is needed/wrong, so the
+    console shows a code prompt instead of an error. Access & Permissions'
+    "Require two-factor authentication" toggle now drives real enrollment
+    in Live mode (reveals the secret + a confirm-code panel); Demo mode
+    keeps its old cosmetic-only toggle.
+  - **SSO (Windows Integrated Auth)**: new `Config.Directory.SsoEnabled`
+    flag (`config.sample.json`, persisted via `POST /api/config` ->
+    `directory.ssoEnabled`) and `POST /api/auth/sso`, which trusts an
+    `X-Windows-User` header forwarded by IIS once Windows Authentication is
+    enabled on the site (DSMT itself never negotiates Kerberos/NTLM — IIS
+    does) and resolves the user through the exact same `Resolve-ConsoleRole`
+    group mapping as a normal domain sign-in — no separate access grant.
+    The "Allow Windows / SSO sign-in" toggle persists the flag in Live mode
+    and shows/hides a "Sign in with Windows" button on the login screen
+    (`signInSso()`).
+  - **Logging**: every new/changed action (MFA setup/enable/disable, SSO
+    toggle, SSO sign-in success/denial, MFA challenge denial) calls the
+    existing `Write-Audit` -> `dbo.AuditLog`, visible in the console's
+    existing Audit tab. `Write-DbLog` already covers SQL-unreachable
+    fallback to a local file, and Pode's built-in `dsmt-request`/
+    `dsmt-error` file logging already covers every HTTP request/error — all
+    pre-existing infrastructure, nothing new needed there.
+  - Verified: `Auth.psm1`/`DSMT_Api.ps1` ASCII + brace-balance checked (PS
+    5.1 compatible, no `pwsh` available in this sandbox to actually execute
+    them — TOTP math verified via an equivalent Python script against the
+    RFC 6238 test vector instead). `index-new.html` manifest + template
+    both `json.loads()` clean, class-body braces balanced, headless
+    Chromium render clean. Playwright: signed in via Enter key in the
+    password field (zero JS errors), demo-mode toggled all three
+    Access & Permissions switches (MFA/SSO/local admin) with zero errors,
+    Live-mode MFA toggle click against an unreachable API failed gracefully
+    (the `.catch()` toast path ran, no thrown error) confirming the
+    error-handling path works even though no real DSMT API server exists
+    in this sandbox to fully exercise the new routes end-to-end.
+  - Version bumped to 3.33.0 (index-new.html's single About-modal version
+    string — this file doesn't carry the 6-place literal `index.html` has).
+  - **Caveat for next session**: this SSO/MFA implementation exists in the
+    API/PowerShell layer (usable by ANY console) and is wired into
+    `index-new.html`, but NOT into the shipped `index.html` — that's a
+    separate follow-up if/when the redesign ships to production. Also, MFA
+    QR-code display is text-only (secret + otpauth URI, no rendered QR
+    image) — deliberately kept dependency-free/offline; revisit if users
+    find manual entry too painful.
 - **Live-mode API wiring on index-new.html (this session)**: user asked
   whether all buttons work in Live mode; the honest answer was no —
   index-new.html was demo-only, the Live/Demo toggle was cosmetic. User

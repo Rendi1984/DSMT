@@ -57,6 +57,15 @@ CREATE TABLE dbo.LocalAccounts (
 );
 GO
 
+/* MFA (TOTP) columns - added via idempotent ALTER so re-running this
+   schema against an existing install (Invoke-DbMigrate) is safe. */
+IF COL_LENGTH('dbo.LocalAccounts', 'MfaEnabled') IS NULL
+ALTER TABLE dbo.LocalAccounts ADD MfaEnabled BIT NOT NULL DEFAULT 0;
+GO
+IF COL_LENGTH('dbo.LocalAccounts', 'MfaSecret') IS NULL
+ALTER TABLE dbo.LocalAccounts ADD MfaSecret NVARCHAR(64) NULL;
+GO
+
 /* ---- Audit trail ----------------------------------------- */
 IF OBJECT_ID('dbo.AuditLog') IS NULL
 CREATE TABLE dbo.AuditLog (
