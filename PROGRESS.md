@@ -10,6 +10,35 @@ pick up immediately.
 3.32.3 (API + Console) — see `CHANGELOG.md` for the authoritative log.
 
 ## Open tasks
+- **User feedback fixes on index-new.html (this session), addressed
+  immediately rather than queued as a rollout item since they're bugs in
+  work already shipped, not new pages: (1) Database tab's "Create
+  database" gave no visible confirmation - `createDb()` updated `db.name`
+  internally but left `dbMode` at `'new'`, so the UI kept showing the same
+  empty create-form with no visible change; fixed to switch `dbMode` to
+  `'existing'` + set `dbConnected:true` + a toast naming the created DB,
+  so the picker now visibly shows the new DB selected. Also added a guard
+  for an empty name. (2)+(4) The demo had no sign-in screen or logoff -
+  it booted straight into the app shell as "administrator", and there was
+  no way back out. Added a real (if simplified) sign-in gate: wrapped the
+  whole `<aside>+<main>` app shell in a new `authed` binding, added a
+  sibling `notAuthed` sign-in card (branding + fixed admin/password
+  display + "Sign in as Local Administrator" button - this demo doesn't
+  model real credentials, only demonstrates the gate), and a Logoff
+  button (⏻) next to the theme toggle in the aside footer. (3) is the
+  same root cause as (1) - "didn't really create a database" was the
+  user's read of the no-visible-feedback bug, not a separate issue.
+  Verified with Playwright: sign-in screen shows on load (app shell
+  NOT visible until sign-in), Sign in reveals the shell, Database tab's
+  Create flow now visibly switches to the existing-database picker with
+  the new DB selected + a toast naming it, Logoff returns to the sign-in
+  screen - zero page errors, manifest (25 keys) + template both
+  `json.loads()` clean, braces/parens balanced. Note: a Playwright click
+  on the new Logoff button intercepted by the `[bundle] error` headless-
+  mode-only overlay (same pre-existing false positive documented for
+  3.30.0/Database item (e)) needed `force:true` or removing that overlay
+  first in the test - not a real bug, just a headless-test quirk now that
+  something clickable sits at the very bottom of the aside.
 - **Design-mockup integration into real index.html - user approved the
   index-new.html demo (all 3 palettes + dark/light look good) and wants it
   merged into production. User explicitly asked to break this into
