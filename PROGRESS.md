@@ -10,6 +10,58 @@ pick up immediately.
 3.32.3 (API + Console) — see `CHANGELOG.md` for the authoritative log.
 
 ## Open tasks
+- **Live-mode API wiring on index-new.html (this session)**: user asked
+  whether all buttons work in Live mode; the honest answer was no —
+  index-new.html was demo-only, the Live/Demo toggle was cosmetic. User
+  explicitly asked to wire everything to the real API, keep it all in
+  index-new.html only, and not touch index.html (kept as their rollback
+  copy). Ported the full Live-mode business logic from the production
+  index.html's class body into index-new.html's already-redesigned
+  structure: `apiFetch` (Bearer token + `state.apiBase`), real
+  `signIn`/`signInLive` (`POST /api/auth/login`), `testApi`
+  (`POST /api/directory/test`), `computeAlerts`/`loadAlertsLive`
+  (`GET /api/alerts`), Database tab (`testDbServerLive`/`createDbLive`/
+  `testDbLive`/`saveDbLive`/`runMigrationsLive`/`backupDbLive`/
+  `loadDbInfoLive` against `/api/db/*`), Contractor Info (`genCtrLive` +
+  new `mapContractor()` adapter to keep index-new.html's `ctrResult`
+  shape), DL Groups (`genDlLive`/`loadMembersLive`), Azure Sync
+  (`runSyncLive` -> `/api/sync`), Password Expiry (`genPwExpLive` ->
+  `/api/passwords/expiring`), Dashboard health (`loadHealthLive` ->
+  `/api/health`), Event Viewer (`genEventsLive` -> `/api/events`),
+  Scheduled Jobs (`jobToggleLive`/`jobRunLive`), Groups member management
+  (`loadMembersLive`/`addMemberLive`/`removeMemberLive`), Certificate
+  Authority (`loadCaLive`/approve/deny/revoke/publish-crl/backup against
+  `/api/ca/*`), Diagnostics (`runDcCheckLive`/`runExCheckLive`), User
+  Management (`loadUsersLive`/create/reset/lock/disable/bulk actions/
+  `runOffboardLive`), Access & Permissions (`setMapRole`/`removeMapping`/
+  `addMapping`/`toggleLocal`/`removeLocal`/`addLocal`/`loadAccessLive`
+  all branching on `state.connMode==='live'`), and Secrets
+  (`saveSecretLive`/`testSecretLive`/`rotateSecretLive`). Reconciled
+  field-name differences between the two files' state shapes
+  (index-new.html uses `mappings`/`newGroup`/`newRole`/`locals`/
+  `newUser`/`newPass` where production uses `roleMappings`/
+  `newMapGroup`/`newMapRole`/`localAccounts`/`newLocalUser`/
+  `newLocalPassword`) so the ported logic writes to index-new.html's
+  actual field names, not production's. Added missing state fields
+  `apiToken`, `liveAlerts`, `defaultPwWarning` (`apiStatus` already
+  existed). Every demo-mode fallback path (setTimeout timing, toast
+  copy, sample data) was preserved exactly — only
+  `if (connMode==='live') {...Live(); return;}` branches plus the new
+  `...Live` methods were added, so Demo mode behaves identically to
+  before. Verified: manifest + template both `json.loads()` clean,
+  class-body braces balanced, headless Chromium render clean (only
+  pre-existing dbus/sandbox noise, no JS errors), Playwright regression
+  pass signing in and clicking through all sub-tabs of all three
+  workspaces (Settings/Hafala Tools/System Team, 14 sub-tabs each) with
+  zero page errors, and a Live-mode smoke test (toggled Connection tab to
+  Live, clicked Test Connection against an unreachable API base) that
+  failed gracefully with no thrown JS error, confirming `apiFetch`'s
+  catch path works. **Caveat, disclosed to the user**: there is no real
+  DSMT API server in this sandbox, so Live-mode endpoints/payloads could
+  only be verified by exact code-level comparison against production's
+  contract, not by exercising a real backend end-to-end — the user
+  should smoke-test each Live-mode page against their real server after
+  deploying index-new.html. `index.html` was not modified.
 - **User feedback fixes on index-new.html (this session), addressed
   immediately rather than queued as a rollout item since they're bugs in
   work already shipped, not new pages: (1) Database tab's "Create
