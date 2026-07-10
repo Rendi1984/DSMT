@@ -248,7 +248,22 @@ pick up immediately.
        unbuilt tabs) shows the placeholder, Settings -> Access &
        Permissions still works after a full workspace round-trip - zero
        page errors, manifest (25 keys) + template both `json.loads()`
-       clean, braces/parens balanced. (k) Audit Log - filterable table, similar shape,
+       clean, braces/parens balanced. (k) **DONE (this session) - Audit
+       Log** - 6 filter pills (All/Sign-in/User/Password/Lock/Sync) +
+       a result table (Time/Actor/Action/Target/Result), using
+       `sc-raw-table` aliases (nested `sc-for`). Ported `AUDIT` sample
+       data from the real `index.html`; filtering is a plain client-side
+       `.filter()` on `kind`, no loading state needed (unlike the other
+       System Team pages, this one doesn't have a Generate/Refresh step
+       in the real app either - it's always populated). Verified with
+       Playwright: filter pills render, default "All" shows all 7 log
+       entries (8 rows including header), clicking "Sign-in" narrows to
+       the 2 matching entries (3 rows including header - confirms
+       filtering AND row rendering both work, not just a static count),
+       other System Team tabs still show the placeholder, Settings ->
+       Access & Permissions still works after a full workspace round-trip
+       - zero page errors, manifest (25 keys) + template both
+       `json.loads()` clean, braces/parens balanced.
        (l) Dashboard - health tiles + recent activity, (m) Event Viewer -
        filters (server/log/level/hours/query) + results table, (n)
        Scheduled Jobs - table with enable/disable/run-now actions, (o)
