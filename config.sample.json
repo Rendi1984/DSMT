@@ -40,6 +40,25 @@
 
   "CertificateAuthority": {
     "ConfigString": "CA-01.lab.local\\lab-Enterprise-CA"
+  },
+
+  "Smtp": {
+    "Server": "",
+    "Port": 25,
+    "From": "dsmt@lab.local",
+    "Username": "",
+    "Password": "",
+    "UseTls": false
+  },
+
+  "Diagnostics": {
+    "DcHosts": "",
+    "ExchangeHosts": "",
+    "ReportEnabled": false,
+    "ReportFrequency": "Daily",
+    "ReportDayOfWeek": "Monday",
+    "ReportTime": "07:00",
+    "ReportRecipients": ""
   }
 }
 

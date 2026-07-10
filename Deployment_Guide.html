@@ -703,9 +703,26 @@ notepad config.json</pre><p>Set <strong>Database</strong>, <strong>Directory</st
       <div class="feature" id="f-diag">
         <div class="feature-head"><h3>Diagnostics</h3><span class="pill ok">read-only</span></div>
         <p>Domain-controller health (discovers DCs three ways, then checks NTDS/DNS/Netlogon/KDC/W32Time/DFSR/ADWS), Exchange component health (any number of hosts), and a test-message tool that can either simulate or genuinely send through your SMTP server.</p>
+        <p><strong>Extended DC checks (3.34.0):</strong> pass <code>?extended=true</code> to attach two more checks per DC beyond the plain service probe - <strong>replication</strong> (native <code>Get-ADReplicationPartnerMetadata</code>, no external tooling) and <strong>extended health</strong> (wraps <code>dcdiag.exe /q</code> and parses its PASS/FAIL summary - the standard tool AD admins already reach for, not reinvented). Both are slower than the plain probe (dcdiag can take 10-30s per host) so they're opt-in, not default. <code>dcdiag.exe</code> must be present (RSAT: Active Directory Domain Services Tools) - if it isn't, the health check reports "unavailable" per host rather than failing the whole request.</p>
         <h4>To configure</h4>
         <p>Targets need the <strong>“Remote Service Management”</strong> firewall rules enabled. A blocked ping does not, by itself, mean a host is reported unreachable — the service query is attempted regardless.</p>
-        <div class="feature-meta"><code>GET /api/diag/dcs</code><code>POST /api/diag/exchange</code><code>POST /api/diag/message</code></div>
+        <div class="feature-meta"><code>GET /api/diag/dcs?extended=true</code><code>POST /api/diag/exchange</code><code>POST /api/diag/message</code></div>
+      </div>
+
+      <div class="feature" id="f-notify">
+        <div class="feature-head"><h3>Notifications (SMTP)</h3></div>
+        <p><strong>Added in 3.34.0.</strong> One saved SMTP server config (host, port, from address, optional credentials, TLS) used everywhere DSMT sends mail - the Diagnostics "Send test email" button and scheduled diagnostics reports both read from it, instead of retyping the server on every test. The password is never sent back to the browser after saving (same pattern as every other secret field in this console) - the field shows a "(saved)" placeholder and is only overwritten if you type a new value.</p>
+        <h4>To configure</h4>
+        <p>Settings &rarr; Notifications. Any field left blank on save keeps its previous value except the password, which only changes if non-empty.</p>
+        <div class="feature-meta"><code>GET/POST /api/settings/smtp</code></div>
+      </div>
+
+      <div class="feature" id="f-diag-reports">
+        <div class="feature-head"><h3>Scheduled diagnostics reports</h3></div>
+        <p><strong>Added in 3.34.0.</strong> Diagnostics &rarr; Reports &amp; Email. Runs DC service + replication + extended health checks (and Exchange checks, if hosts are configured) on a daily or weekly schedule, and emails the results to a recipient list. Saving the schedule registers a Windows scheduled task named <code>DSMT-DiagReport</code> that calls a standalone script (<code>Send-DiagReport.ps1</code>, installed alongside <code>DSMT_Api.ps1</code>) directly with <code>powershell.exe</code> - deliberately independent of the running API/Pode process, so the report still fires even if the <code>DSMT-Api</code> service happens to be mid-restart when the trigger time hits. "Run now" executes the same report immediately through the API instead, for testing the configuration without waiting for the schedule.</p>
+        <h4>To configure</h4>
+        <p>Turn on the toggle, pick Daily or Weekly (+ day), set a time, list DC hosts (comma or newline separated) and optionally Exchange hosts, list recipients, then Save schedule. The task runs as <code>SYSTEM</code> - it needs the same "Remote Service Management" firewall rules as the interactive Diagnostics checks, and <code>dcdiag.exe</code> for the extended health portion.</p>
+        <div class="feature-meta"><code>GET/POST/DELETE /api/diag/schedule</code><code>POST /api/diag/report/run</code></div>
       </div>
 
       <div class="feature" id="f-access">
@@ -866,7 +883,7 @@ notepad config.json</pre><p>Set <strong>Database</strong>, <strong>Directory</st
 
     <div class="callout note" style="margin-top:60px;">
       <div class="dot"></div>
-      <p><strong>Version</strong> This guide describes DSMT 3.33.0 (index-new.html preview) / 3.32.3 (shipped index.html console). See <code>CHANGELOG.md</code> for the full release history.</p>
+      <p><strong>Version</strong> This guide describes DSMT 3.34.0 (index-new.html preview) / 3.32.3 (shipped index.html console). See <code>CHANGELOG.md</code> for the full release history.</p>
     </div>
   </main>
 </div>

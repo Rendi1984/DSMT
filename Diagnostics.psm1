@@ -112,6 +112,123 @@ function Test-ExchangeServer {
     }
 }
 
+function Test-DcReplication {
+    <# Summarizes AD replication health per DC using the native
+       Get-ADReplicationPartnerMetadata cmdlet (no external tooling) - for
+       each partner link, whether the last attempt succeeded and how long
+       since the last successful replication. #>
+    param([Parameter(Mandatory)][string[]] $Hosts)
+    Import-Module ActiveDirectory -ErrorAction Stop
+    $out = @()
+    foreach ($h in $Hosts) {
+        try {
+            $partners = @(Get-ADReplicationPartnerMetadata -Target $h -Scope Server -ErrorAction Stop)
+            $failed = @($partners | Where-Object { $_.LastReplicationResult -ne 0 })
+            $oldestSuccess = $partners | Sort-Object LastReplicationSuccess | Select-Object -First 1
+            $out += [pscustomobject]@{
+                host = $h; ok = ($failed.Count -eq 0); partnerCount = $partners.Count; failedCount = $failed.Count
+                oldestSuccess = if ($oldestSuccess) { $oldestSuccess.LastReplicationSuccess.ToString('yyyy-MM-dd HH:mm') } else { $null }
+                detail = if ($failed.Count -gt 0) { ($failed | ForEach-Object { "$($_.Partner): $($_.LastReplicationResult)" }) -join '; ' } else { 'All partners replicating cleanly' }
+            }
+        } catch {
+            $out += [pscustomobject]@{ host = $h; ok = $false; partnerCount = 0; failedCount = 0; oldestSuccess = $null; detail = $_.Exception.Message }
+        }
+    }
+    return $out
+}
+
+function Test-DcHealth {
+    <# Runs the native dcdiag.exe (present on every DC / any machine with
+       RSAT-AD-Tools) against a target in quiet mode and parses its
+       PASS/FAIL summary lines - the standard "is this DC healthy" tool
+       AD admins already know, rather than reinventing its checks. #>
+    param([Parameter(Mandatory)][string] $DcHost, [int] $TimeoutSeconds = 60)
+    $exe = Get-Command dcdiag.exe -ErrorAction SilentlyContinue
+    if (-not $exe) {
+        return [pscustomobject]@{ host = $DcHost; ok = $null; tests = @(); detail = 'dcdiag.exe not found on this machine (install RSAT: Active Directory Domain Services Tools).' }
+    }
+    try {
+        $raw = & dcdiag.exe /s:$DcHost /q 2>&1 | Out-String
+        $lines = @($raw -split "`r?`n" | Where-Object { $_ -match '\.\.\.\.\.\.\.\.\.\.\.\.\.\.\.\.\.\.\.\.\.\. (\S+) (passed|failed) test (\S+)' })
+        $tests = @()
+        foreach ($l in $lines) {
+            if ($l -match '\.\.\.\.\.\.\.\.\.\.\.\.\.\.\.\.\.\.\.\.\.\. (\S+) (passed|failed) test (\S+)') {
+                $tests += [pscustomobject]@{ target = $Matches[1]; result = $Matches[2]; name = $Matches[3] }
+            }
+        }
+        $failed = @($tests | Where-Object { $_.result -eq 'failed' })
+        return [pscustomobject]@{
+            host = $DcHost; ok = ($tests.Count -gt 0 -and $failed.Count -eq 0); tests = $tests
+            detail = if ($tests.Count -eq 0) { 'dcdiag produced no parseable test lines - see raw output.' }
+                     elseif ($failed.Count -gt 0) { ($failed | ForEach-Object { $_.name }) -join ', ' }
+                     else { "$($tests.Count) tests passed" }
+        }
+    } catch {
+        return [pscustomobject]@{ host = $DcHost; ok = $false; tests = @(); detail = $_.Exception.Message }
+    }
+}
+
+function New-DiagnosticsReportBody {
+    <# Composes a plain-text report from whatever check results are passed
+       in - used by both the on-demand "Run now" API call and the
+       scheduled-task entry script, so the email content is identical
+       either way. #>
+    param($DcResults = @(), $ReplicationResults = @(), $HealthResults = @(), $ExchangeResults = @())
+    $lines = @()
+    $lines += "DSMT diagnostics report - $(Get-Date -Format 'yyyy-MM-dd HH:mm')"
+    $lines += ''
+    if ($DcResults.Count -gt 0) {
+        $lines += '== Domain controller services =='
+        foreach ($d in $DcResults) { $lines += "  $($d.host): $($d.running)/$($d.total) services running $(if($d.healthy){'(healthy)'}else{'(ATTENTION)'})" }
+        $lines += ''
+    }
+    if ($ReplicationResults.Count -gt 0) {
+        $lines += '== Replication =='
+        foreach ($r in $ReplicationResults) { $lines += "  $($r.host): $(if($r.ok){'OK'}else{'ATTENTION'}) - $($r.detail)" }
+        $lines += ''
+    }
+    if ($HealthResults.Count -gt 0) {
+        $lines += '== Extended health (dcdiag) =='
+        foreach ($h in $HealthResults) { $lines += "  $($h.host): $(if($h.ok){'OK'}else{'ATTENTION'}) - $($h.detail)" }
+        $lines += ''
+    }
+    if ($ExchangeResults.Count -gt 0) {
+        $lines += '== Exchange services =='
+        foreach ($e in $ExchangeResults) { $lines += "  $($e.host): $($e.running)/$($e.total) services running $(if($e.healthy){'(healthy)'}else{'(ATTENTION)'})" }
+        $lines += ''
+    }
+    return ($lines -join "`n")
+}
+
+function Send-DiagnosticsReport {
+    <# End-to-end: runs whichever checks have hosts configured, builds the
+       report body, and emails it via Send-TestMessage using the saved SMTP
+       config. Shared by the "Run now" API route and the scheduled-task
+       entry script (Send-DiagReport.ps1) so behavior never diverges
+       between the two trigger paths. #>
+    param(
+        [Parameter(Mandatory)] $Smtp,
+        [string[]] $DcHosts = @(),
+        [string[]] $ExchangeHosts = @(),
+        [Parameter(Mandatory)][string[]] $Recipients
+    )
+    $dcResults = @(); $replResults = @(); $healthResults = @(); $exResults = @()
+    if ($DcHosts.Count -gt 0) {
+        $dcResults = @(Test-DcServices -Hosts $DcHosts)
+        try { $replResults = @(Test-DcReplication -Hosts $DcHosts) } catch {}
+        foreach ($h in $DcHosts) { $healthResults += (Test-DcHealth -DcHost $h) }
+    }
+    foreach ($h in $ExchangeHosts) { $exResults += (Test-ExchangeServer -ExchangeHost $h) }
+    $body = New-DiagnosticsReportBody -DcResults $dcResults -ReplicationResults $replResults -HealthResults $healthResults -ExchangeResults $exResults
+    $anyFailure = (@($dcResults) + @($replResults) + @($healthResults) + @($exResults)) | Where-Object { $_.healthy -eq $false -or $_.ok -eq $false }
+    $subject = if ($anyFailure) { 'DSMT diagnostics report - ATTENTION NEEDED' } else { 'DSMT diagnostics report - all clear' }
+    $sendResult = $null
+    foreach ($to in $Recipients) {
+        $sendResult = Send-TestMessage -SmtpServer $Smtp.Server -Port ([int]$Smtp.Port) -To $to -From $Smtp.From -Subject $subject -Body $body -Username $Smtp.Username -Password $Smtp.Password -UseTls:([bool]$Smtp.UseTls)
+    }
+    return [pscustomobject]@{ ok = $true; subject = $subject; body = $body; sendResult = $sendResult; dcResults = $dcResults; replResults = $replResults; healthResults = $healthResults; exResults = $exResults }
+}
+
 function Send-TestMessage {
     <#
       Sends a test email via an SMTP server, OR simulates it (no send) when
@@ -184,4 +301,5 @@ function Get-RemoteEvents {
 }
 
 Export-ModuleMember -Function Get-DomainControllers, Test-DcServices,
-    Test-ExchangeServer, Send-TestMessage, Get-RemoteEvents
+    Test-ExchangeServer, Send-TestMessage, Get-RemoteEvents,
+    Test-DcReplication, Test-DcHealth, New-DiagnosticsReportBody, Send-DiagnosticsReport

@@ -1,5 +1,13 @@
 # Changelog
 All notable changes to the Directory Services Management Tool.
+## 3.34.0 (index-new.html)
+Persisted SMTP settings, real "send test email," extended DC diagnostics (replication + dcdiag), and scheduled email reports - `index-new.html` only, `index.html` unchanged.
+
+- **SMTP settings moved to Settings &rarr; Notifications**: previously there was no persisted SMTP config anywhere - the (unbuilt) "send test message" feature would have required retyping the server/port/credentials on every single test. New `Config.Smtp` block (`config.sample.json`), `GET/POST /api/settings/smtp` (password never sent back to the browser, same pattern as every other secret field in this app).
+- **Diagnostics &rarr; Reports & Email** (new 3rd sub-tab, alongside Domain Controllers / Exchange): a real "Send test email" button using the saved SMTP config (`POST /api/diag/message`, which now falls back to `Config.Smtp.*` for any field not explicitly overridden), and a scheduled-report section (frequency, day, time, DC/Exchange host lists, recipients, enable toggle, Save + Run now).
+- **Extended DC checks**: `Test-DcReplication` (native `Get-ADReplicationPartnerMetadata`, no external tooling) and `Test-DcHealth` (wraps `dcdiag.exe /q`, parses its PASS/FAIL summary - the standard tool AD admins already use, not reinvented). `GET /api/diag/dcs?extended=true` attaches both to each DC's existing service-probe result; the Domain Controllers panel now shows a replication line and a health line under each host's service chips.
+- **Scheduled email reports**: `POST /api/diag/schedule` registers a Windows scheduled task (`DSMT-DiagReport`, daily or weekly) that runs the new standalone `Send-DiagReport.ps1` - deliberately independent of the running API/Pode process, so the report still fires even if the service happens to be restarting. It reuses the exact same `Send-DiagnosticsReport` function (`Diagnostics.psm1`) the "Run now" API route calls, so scheduled and on-demand reports are always identical. Every run (scheduled or manual) logs through the existing `Write-Audit`.
+
 ## 3.33.0 (index-new.html)
 Real Live-mode SSO and MFA, plus Enter-to-submit on sign-in - `index-new.html` only, `index.html` unchanged.
 

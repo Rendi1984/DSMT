@@ -7,10 +7,69 @@ useful context under "Notes" so a fresh session (with no chat history) can
 pick up immediately.
 
 ## Current version
-3.33.0 (index-new.html preview) / 3.32.3 (shipped index.html console) — see
+3.34.0 (index-new.html preview) / 3.32.3 (shipped index.html console) — see
 `CHANGELOG.md` for the authoritative log.
 
 ## Open tasks
+- **SMTP settings + extended DC diagnostics + scheduled email reports (this
+  session)**: user asked to (1) persist an SMTP address somewhere sensible
+  instead of retyping it, (2) send a real test email from Diagnostics using
+  that saved config, (3) be able to schedule a test/report from the server,
+  and (4) add DC checks beyond services — replication, general health — plus
+  a scheduled email report of the results. Delivered all four, `index.html`
+  untouched:
+  - **SMTP settings**: new `Config.Smtp` block, new Settings sub-tab
+    "Notifications" (9th tab, after Roles) with server/port/from/username/
+    password/TLS fields. `GET/POST /api/settings/smtp` — password is never
+    echoed back to the browser (shows a "(saved)" placeholder, same pattern
+    as every other secret in this app), only overwritten on save if
+    non-empty.
+  - **Send test email**: Diagnostics gained a 3rd sub-tab "Reports & Email"
+    (alongside Domain Controllers / Exchange). `POST /api/diag/message` was
+    extended to fall back to `Config.Smtp.*` for any field the caller
+    doesn't supply, so the console only needs a "To" address once SMTP is
+    configured once.
+  - **Extended DC checks**: `Test-DcReplication` (native
+    `Get-ADReplicationPartnerMetadata`, no external tooling — summarizes
+    per-DC replication partner failures) and `Test-DcHealth` (wraps the
+    standard `dcdiag.exe /q` and parses its PASS/FAIL lines — reused the
+    tool AD admins already know instead of reinventing DC health checks).
+    `GET /api/diag/dcs?extended=true` attaches both to each host's existing
+    service-probe result (opt-in via query param since dcdiag can take
+    10-30s/host); the console's DC result cards now show a replication line
+    and a health line under the service chips.
+  - **Scheduled email reports**: Diagnostics → Reports & Email also has a
+    schedule section (Daily/Weekly + day, time, DC hosts, Exchange hosts,
+    recipients, enable toggle). Saving it registers/updates a Windows
+    scheduled task (`DSMT-DiagReport`) via `Register-ScheduledTask` that
+    runs a new standalone script, `Send-DiagReport.ps1` — deliberately
+    independent of the running `DSMT-Api` Pode process (invoked directly by
+    `powershell.exe` from Task Scheduler) so the report still fires even if
+    the API service happens to be restarting at trigger time. Both the
+    scheduled task and the API's "Run now" button (`POST
+    /api/diag/report/run`) call the same `Send-DiagnosticsReport` function
+    in `Diagnostics.psm1`, so scheduled and on-demand reports are always
+    identical — no logic duplicated between the two trigger paths. Every
+    run (scheduled or manual) logs through the existing `Write-Audit`.
+  - Verified: `Diagnostics.psm1`/`DSMT_Api.ps1`/`Send-DiagReport.ps1` ASCII
+    + brace-balance checked (no `pwsh` in this sandbox to execute them).
+    `index-new.html` manifest + template both `json.loads()` clean,
+    class-body braces balanced, full Playwright regression across all
+    sub-tabs of all 3 workspaces (zero errors), targeted tests of the new
+    Notifications tab (fill + save), Reports & Email tab (send test email,
+    toggle + save schedule, run now, DC check with extended replication/
+    health fields rendering) — all zero errors in both Demo mode and
+    Live mode against an unreachable API (graceful `.catch()` failures,
+    confirmed no thrown JS errors).
+  - Version bumped to 3.34.0 (index-new.html's single About-modal string).
+  - **Caveat for next session**: same as the MFA/SSO caveat below — this is
+    wired into `index-new.html` only, not the shipped `index.html`. Also
+    untestable end-to-end without a real DC/Exchange/SMTP server in this
+    sandbox (dcdiag.exe, Get-ADReplicationPartnerMetadata, Register-
+    ScheduledTask, and Send-MailMessage all require a real Windows Server +
+    AD environment) — verified by code review + graceful-failure testing
+    only. Recommend testing the scheduled task registration and an actual
+    dcdiag run against a real DC after deploying.
 - **Enter-to-submit + real MFA/SSO on index-new.html (this session)**: user
   asked for (1) pressing Enter on the sign-in form instead of requiring a
   button click, (2) audit logging strategy (answered: keep the existing
