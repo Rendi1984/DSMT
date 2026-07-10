@@ -11,6 +11,26 @@ pick up immediately.
 `CHANGELOG.md` for the authoritative log.
 
 ## Open tasks
+- **vCenter delegated (per-user) auth — considered, deferred (this
+  session)**: user asked about connecting to vCenter/ESXi using the
+  permissions of the signed-in domain user instead of the shared service
+  account. Explained the real mechanism (vCenter doesn't accept Kerberos
+  delegation directly - it needs a Solution User registered against
+  vCenter SSO with a certificate, granted `ActAsUsers`, which then
+  exchanges a WS-Trust SAML "ActAs" token with the SSO STS for the target
+  user - no AD-side Kerberos constrained delegation needed at all, despite
+  that being the intuitive assumption). Stopped before implementing the
+  actual STS token-request code: the exact WS-Trust/SAML XML wire format
+  vCenter's STS expects is a VMware-proprietary protocol detail not
+  reliably verifiable from memory without their official SSO
+  Administration Programming Guide or internet access in this sandbox -
+  shipping a guessed implementation risked silently-wrong crypto/XML that
+  would waste the user's time debugging against their real lab. User
+  decided to stay on the current shared-service-account model (built in
+  3.35.0) and revisit delegated auth later. **If resumed**: the user has a
+  real vCenter+AD lab available to test against - next session should
+  either get the official STS request schema first, or iterate
+  hands-on against that lab rather than guessing the protocol upfront.
 - **vCenter/ESXi integration + specific error messages + install-process
   review (this session)**: user asked for (1) connecting to vCenter/ESXi to
   pull user lists + permission types into a dedicated tab, with thought
