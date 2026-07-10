@@ -487,7 +487,7 @@ cd C:\DSMT\server
     <section id="install-manual">
       <div class="eyebrow">Install · Path C</div>
       <h2>Manual, stage by stage</h2>
-      <p>Useful when you want to run one stage at a time, or re-run just one step. All commands run from <code>server\</code> in an elevated PowerShell.</p>
+      <p><strong>This is a maintenance tool for an already-running install, not a second way to do the initial install</strong> — use it to re-register the service after a manual file copy, reset the local administrator's password, or re-apply the schema, one step at a time, without touching anything else. For a fresh install, use Path A or B above. <code>Install.ps1</code> and <code>Install-DSMT.ps1</code> share the exact same native-service registration code (<code>Register-DsmtService.ps1</code>), so nothing can drift between the two paths. All commands run from <code>server\</code> in an elevated PowerShell.</p>
 
       <ol class="steps">
         <li><h4>Prerequisites</h4><pre class="code">.\Install.ps1 -Prereqs</pre><p>Installs RSAT-AD-PowerShell and the Pode web framework (online from PSGallery, or offline from a bundled <code>vendor\Pode</code> folder).</p></li>
@@ -871,8 +871,9 @@ notepad config.json</pre><p>Set <strong>Database</strong>, <strong>Directory</st
 ├─ CHANGELOG.md
 ├─ index.html                      <span class="c">← the console (deployed to IIS)</span>
 └─ server/
-   ├─ Install-DSMT.ps1             <span class="c">← the all-in-one installer</span>
-   ├─ Install.ps1                  <span class="c">← manual/granular installer</span>
+   ├─ Install-DSMT.ps1             <span class="c">← recommended: the all-in-one installer</span>
+   ├─ Install.ps1                  <span class="c">← maintenance-only: granular commands for an existing install</span>
+   ├─ Register-DsmtService.ps1     <span class="c">← shared service-registration code used by both installers above</span>
    ├─ DSMT_Api.ps1                 <span class="c">← the REST API entry point</span>
    ├─ config.sample.json           <span class="c">← copy to config.json</span>
    ├─ modules/
@@ -891,7 +892,7 @@ notepad config.json</pre><p>Set <strong>Database</strong>, <strong>Directory</st
 
     <div class="callout note" style="margin-top:60px;">
       <div class="dot"></div>
-      <p><strong>Version</strong> This guide describes DSMT 3.35.0 (index-new.html preview) / 3.32.3 (shipped index.html console). See <code>CHANGELOG.md</code> for the full release history.</p>
+      <p><strong>Version</strong> This guide describes DSMT 3.36.0 (index-new.html preview) / 3.32.3 (shipped index.html console). See <code>CHANGELOG.md</code> for the full release history.</p>
     </div>
   </main>
 </div>

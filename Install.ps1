@@ -100,89 +100,11 @@ WHEN NOT MATCHED THEN INSERT(Username,ConsoleRole,PwHash,PwSalt,Iterations,Enabl
 
 if ($RegisterService) {
     Write-Host '== Registering Windows service ==' -ForegroundColor Cyan
-    $pwsh = (Get-Command pwsh -ErrorAction SilentlyContinue).Source
-    if (-not $pwsh) { $pwsh = (Get-Command powershell).Source }
-    $api    = Join-Path $here 'DSMT_Api.ps1'
-    $svcExe = Join-Path $here 'DSMT-Api-Service.exe'
-
-    $existing = Get-Service -Name DSMT-Api -ErrorAction SilentlyContinue
-    if ($existing) {
-        try { Stop-Service DSMT-Api -Force -ErrorAction SilentlyContinue } catch {}
-        & sc.exe delete DSMT-Api | Out-Null
-        Start-Sleep -Seconds 2
-    }
-
-    # Compile a tiny native service host (in-box .NET compiler).
-    $logDir = Join-Path (Split-Path -Parent $here) 'logs'
-    New-Item -ItemType Directory -Path $logDir -Force | Out-Null
-    $svcSrc = @'
-using System; using System.IO; using System.ServiceProcess; using System.Diagnostics; using System.Threading;
-public class DsmtService : ServiceBase {
-  private Process _p; private bool _stopping = false; private Thread _watch;
-  private string _logDir = @"__LOGDIR__"; private object _lock = new object();
-  public DsmtService() { this.ServiceName = "DSMT-Api"; this.CanStop = true; this.CanShutdown = true; }
-  private void Log(string m) {
-    try { lock (_lock) { Directory.CreateDirectory(_logDir);
-      File.AppendAllText(Path.Combine(_logDir, "dsmt-service.log"), DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + "  " + m + Environment.NewLine); } } catch {}
-  }
-  protected override void OnStart(string[] args) { _stopping = false; Log("Service OnStart"); Spawn(); _watch = new Thread(Watch); _watch.IsBackground = true; _watch.Start(); }
-  private void Spawn() {
-    Log("Starting API process");
-    var psi = new ProcessStartInfo();
-    psi.FileName = @"__PSEXE__";
-    psi.Arguments = @"-NoProfile -ExecutionPolicy Bypass -File ""__API__""";
-    psi.WorkingDirectory = @"__HERE__";
-    psi.UseShellExecute = false; psi.CreateNoWindow = true;
-    psi.RedirectStandardOutput = true; psi.RedirectStandardError = true;
-    _p = new Process(); _p.StartInfo = psi;
-    _p.OutputDataReceived += delegate(object s, DataReceivedEventArgs e) { if (e.Data != null) Log("OUT " + e.Data); };
-    _p.ErrorDataReceived += delegate(object s, DataReceivedEventArgs e) { if (e.Data != null) Log("ERR " + e.Data); };
-    _p.Start(); _p.BeginOutputReadLine(); _p.BeginErrorReadLine();
-    Log("API process started, PID " + _p.Id);
-  }
-  private string SafeExit() { try { return _p.ExitCode.ToString(); } catch { return "?"; } }
-  private void Watch() { while (!_stopping) { try { if (_p != null) _p.WaitForExit(); } catch {} if (_stopping) break; Log("API process exited (code " + SafeExit() + ") - restarting in 3s"); Thread.Sleep(3000); try { Spawn(); } catch (Exception ex) { Log("Respawn failed: " + ex.Message); } } }
-  protected override void OnStop() { _stopping = true; Log("Service OnStop"); Kill(); }
-  protected override void OnShutdown() { _stopping = true; Log("Service OnShutdown"); Kill(); }
-  private void Kill() { try { if (_p != null && !_p.HasExited) _p.Kill(); } catch {} }
-  public static void Main() { ServiceBase.Run(new DsmtService()); }
-}
-'@
-    $svcSrc = $svcSrc.Replace('__PSEXE__', $pwsh).Replace('__API__', $api).Replace('__HERE__', $here).Replace('__LOGDIR__', $logDir)
-    if (Test-Path $svcExe) { try { Remove-Item $svcExe -Force } catch {} }
-    Add-Type -TypeDefinition $svcSrc -ReferencedAssemblies 'System.ServiceProcess' -OutputAssembly $svcExe -OutputType ConsoleApplication -ErrorAction Stop
-    New-Service -Name DSMT-Api -BinaryPathName ('"' + $svcExe + '"') -DisplayName 'DSMT API' -Description 'Directory Services Management Tool - REST API' -StartupType Automatic | Out-Null
-
-    $obj = 'NT AUTHORITY\NetworkService'; $svcPlain = ''
-    if ($ServiceAccount) {
-        $obj = $ServiceAccount
-        if (-not $ServiceAccount.EndsWith('$')) { $svcPlain = Read-Host "Password for $ServiceAccount" }
-    }
-    & sc.exe config DSMT-Api obj= "$obj" password= "$svcPlain" | Out-Null
-    & sc.exe failure DSMT-Api reset= 86400 actions= restart/5000/restart/5000/restart/5000 | Out-Null
-    try { & icacls "$logDir" /grant ("{0}:(OI)(CI)M" -f $obj) /T | Out-Null } catch {}
-
-    # http.sys requires an explicit URL ACL reservation for any non-admin logon
-    # account (NetworkService, a domain service account, a gMSA) to bind an
-    # HTTP endpoint - Pode's http listener uses http.sys underneath. Without
-    # this, Add-PodeEndpoint throws "Access is denied" *inside* the child
-    # process every time it starts; the service still shows "Running" (it
-    # just keeps respawning the crashing child), so the API silently never
-    # listens and every request gets connection-refused.
     $apiPort = 8780
     try { $apiPort = [int](Get-Content $cfgPath -Raw | ConvertFrom-Json).Api.Port } catch {}
-    $urlAclUrl = "http://+:$apiPort/"
-    try {
-        $existing = & netsh http show urlacl url=$urlAclUrl 2>$null
-        if ($existing -match 'Reserved URL') { & netsh http delete urlacl url=$urlAclUrl | Out-Null }
-        & netsh http add urlacl url=$urlAclUrl user="$obj" | Out-Null
-        Write-Host "URL ACL reserved for $obj on $urlAclUrl" -ForegroundColor Green
-    } catch {
-        Write-Warning "Could not reserve the URL ACL ($urlAclUrl) for $obj - the API will fail to bind. Run as admin: netsh http add urlacl url=$urlAclUrl user=`"$obj`""
-    }
-
-    Start-Service DSMT-Api
-    Write-Host "Service DSMT-Api installed and started (logon: $obj; logs: $logDir)." -ForegroundColor Green
+    . (Join-Path $here 'Register-DsmtService.ps1')
+    $svcPlain = if ($ServiceAccount -and -not $ServiceAccount.EndsWith('$')) { Read-Host "Password for $ServiceAccount" -AsSecureString } else { $null }
+    Register-DsmtApiService -Here $here -Root (Split-Path -Parent $here) -ApiPort $apiPort -ServiceAccount $ServiceAccount -ServiceAccountPassword $svcPlain | Out-Null
 }
 
 if (-not ($Prereqs -or $InitDb -or $SeedLocalAdmin -or $RegisterService)) {

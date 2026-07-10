@@ -29,8 +29,9 @@ All files are flat (no folder structure in the project). Logical mapping:
 ```
 index.html          → deploy bundle (root)
 DSMT_Api.ps1        → server/
-Install-DSMT.ps1    → server/
-Install.ps1         → server/
+Install-DSMT.ps1    → server/  ← recommended: one-click, full install
+Install.ps1         → server/  ← granular commands for maintenance on an EXISTING install (re-register service, reset local admin password, re-run schema) - not a competing way to do a fresh install
+Register-DsmtService.ps1 → server/  ← shared native-service registration logic; both installers above dot-source this, so there is exactly one copy of it
 Install.cmd         → root/  ← one-click self-elevating installer, double-click entry point
 Start-Install.ps1   → root/
 Uninstall-DSMT.ps1  → root/

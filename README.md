@@ -91,11 +91,17 @@ anything on the command line:
    LDAP security group to the **System Administrator** role (Access Control) so
    domain admins can sign in with their own accounts.
 
-Both paths are equivalent — `Install.cmd` / `Install-DSMT.ps1` remains fully
-supported for unattended or all-in-one installs.
+**`Install.cmd` / `Install-DSMT.ps1` is the recommended path for a fresh install** —
+one script, every step, unattended or interactive. `Install.ps1` is a separate,
+narrower tool for **maintenance on an already-running install**: re-registering
+the Windows service after a manual file copy, resetting the local administrator's
+password without touching anything else, or re-applying the schema — not a
+second way to do the initial install. Both share the exact same native-service
+registration code (`Register-DsmtService.ps1`), so there's nothing that can drift
+between them.
 
 The numbered steps below document the **manual / granular** path (via `Install.ps1`),
-useful when you want to run a single stage at a time.
+useful for those maintenance operations or when you want to run a single stage at a time.
 
 ---
 
