@@ -437,17 +437,29 @@ pick up immediately.
        user complaint and is fixed. (t) **DONE** - the full workspace
        switcher + sidebar. Also built earlier this session (item f) -
        `WORKSPACES` pill list in the aside (Settings/Hafala Tools/System
-       Team), not just a Settings-only shell. (u) **DONE (this session,
-       partial by design)** - added an About modal (app name/version/
-       description, opened via a new "i" button next to the Connected
-       badge in the header). Skipped the command palette (Ctrl+K) and
-       alerts bell - both are real, useful real-app features, but with
-       no live data/actions behind them in this demo they'd just be
-       inert chrome; toast styling was already consistent across every
-       item built this session (all toasts share the same `showToast()`
-       + `t.green`/`t.amber`/`t.red` coloring), so there was nothing left
-       to unify there. Verified with Playwright: the About modal opens
-       and closes correctly.
+       Team), not just a Settings-only shell. (u) **DONE (this session)**
+       - added an About modal (app name/version/description, opened via
+       a new "i" button next to the Connected badge in the header) AND
+       the alerts bell (user explicitly asked for it back after an
+       earlier pass skipped it as "inert chrome" - corrected: it's not
+       inert, `computeAlerts()` derives real items from state already in
+       the demo - expiring certs from `this.state.certs`, 2 hardcoded
+       password-expiry entries, and a CRL-soon reminder - with a red
+       badge count on the bell, a dropdown panel (Clear all / per-item
+       dismiss), matching the real app's `alertsOpen`/`dismissedAlerts`/
+       `computeAlerts()` pattern). Skipped only the command palette
+       (Ctrl+K) - genuinely low value with no live search index behind
+       it in this demo. Also fixed the Logoff button icon per user
+       feedback: the previous `⏻` power-symbol glyph read as a
+       system-restart/backup icon, not a personal sign-out action -
+       replaced with a proper door+arrow "exit" SVG (same icon language
+       as the rest of the app's SVG icon set, not a text glyph).
+       Verified with Playwright: the bell renders in the header with a
+       badge, the alerts panel opens showing the expiring-cert item,
+       Clear all empties it, and the Logoff button's DOM now contains an
+       `<svg>` icon instead of the power glyph - zero page errors,
+       manifest (25 keys) + template both `json.loads()` clean,
+       braces/parens balanced.
      - **Palette-wiring pass: DONE (this session) - verified, not built**.
        Every single page item (a)-(r) above was written from the start
        reading its colors from the same `t = this.PALETTE_TOKENS[palette]
