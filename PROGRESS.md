@@ -348,8 +348,29 @@ pick up immediately.
        Permissions still works after a full workspace round-trip - zero
        page errors, manifest (25 keys) + template both `json.loads()`
        clean, braces/parens balanced.
-       (p) User Management -
-       full CRUD table, multi-select, offboarding flow (busiest page), (q)
+       (p) **DONE (this session) - User Management** - the busiest page,
+       as flagged in the plan: search box + Create user, a bulk-action
+       toolbar (Reset passwords/Disable/Offboard…/clear) that appears
+       once rows are selected, a full CRUD table (checkbox select-all,
+       per-row Reset PW/Lock/Disable, status + Locked badges) using
+       `sc-raw-table` aliases, and a separate Offboard confirmation modal
+       (idle checklist -> live step-by-step log -> Close) placed as a
+       top-level sibling near the toast, not nested inside the workspace
+       guards, matching how the real app structures its modals. Ported
+       the 7-user sample data and all of `createUser`/`userReset`/
+       `userLock`/`userDisable`/`toggleUserSel`/`clearSel`/`bulkReset`/
+       `bulkDisable`/`openOffboard`/`closeOffboard`/`runOffboard` from
+       the real `index.html`. Verified with Playwright: all 7 users
+       render (8 rows including header - confirms every row rendered),
+       search narrows correctly, select-all shows the bulk toolbar with
+       the right count, bulk Disable shows its toast, Offboard opens the
+       modal with the right names, Run offboarding streams the log to
+       "Offboarding complete" and closes cleanly, individual Reset PW
+       still works per-row, Settings -> Access & Permissions still works
+       after a full workspace round-trip - zero page errors, manifest
+       (25 keys) + template both `json.loads()` clean, braces/parens
+       balanced.
+       (q)
        Certificate Authority - cert lifecycle table + templates +
        issue/renew/revoke actions, (r) Diagnostics - 2 sub-tabs (Domain
        Controllers / Exchange), each with its own test/send panel (most
