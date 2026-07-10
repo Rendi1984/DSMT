@@ -7,10 +7,96 @@ useful context under "Notes" so a fresh session (with no chat history) can
 pick up immediately.
 
 ## Current version
-3.35.0 (index-new.html preview) / 3.32.3 (shipped index.html console) — see
+3.36.0 (index-new.html preview) / 3.32.3 (shipped index.html console) — see
 `CHANGELOG.md` for the authoritative log.
 
 ## Open tasks
+- **Setup wizard ported + real end-to-end verification + installer
+  de-dup (this session)**: user asked three things: (1) why doesn't the
+  browser setup wizard exist in index-new.html when it's supposed to be a
+  copy with different styling only, (2) test the install-process code as an
+  actual run, not just a read, and check item 5 from the prior session's
+  list (verify MFA/SSO/vCenter/Diagnostics against a real environment),
+  (3) explain/resolve why both `Install.ps1` and `Install-DSMT.ps1` exist.
+  Delivered all three, `index.html` untouched:
+  - **Setup wizard**: it was simply never built into `index-new.html` in
+    the first place (not a copy that regressed - the whole 21-item redesign
+    rollout across prior sessions never included it, an oversight now
+    corrected). Ported the full 5-step wizard from production `index.html`
+    (Welcome/prereqs → Database → Directory & access → Local administrator
+    → Review & install) verbatim in structure, restyled to index-new.html's
+    tokens/fonts. Reused the Database step's `db`/`dbMode`/`newDbName`
+    state and `testDbServer(Live)`/`createDb(Live)` methods that already
+    existed for the Settings → Database tab instead of duplicating them -
+    the wizard's DB step is now driven by the exact same code path as the
+    regular Database settings page. Added `openSetup`/`setupCancel`/
+    `setupBack`/`setupPrimary`/`runSetupLive` + 4 field setters + a
+    computed block (`setupSteps`, `setupS0..S4`, `reviewRows`,
+    `installLog`, etc.) mirroring production's logic. A "Run the setup
+    wizard" link now sits on the sign-in screen (shown regardless of Demo/
+    Live, matching production - the wizard itself branches on
+    `connMode==='live'` internally, same pattern as every other action in
+    this app). No backend changes needed - `/api/setup/*` was already
+    reviewed for bugs in the 3.34.0 install-process pass.
+  - **Real end-to-end Live-mode verification**: built a mock DSMT API
+    server (plain Node.js `http`, no framework - see
+    `/tmp/.../scratchpad/live/mock_api.js`, not committed to the repo,
+    scratch-only) that implements the actual request/response contract for
+    every route this session touched: `/api/auth/login` (incl. the MFA
+    `mfaRequired` challenge shape), `/api/auth/sso`, `/api/vcenter/*`,
+    `/api/diag/dcs?extended=true`, `/api/diag/message`,
+    `/api/settings/smtp`, `/api/setup/*`. Pointed `index-new.html`'s
+    `apiBase` at it and drove real flows via Playwright - this is
+    meaningfully stronger evidence than prior sessions' "server
+    unreachable, fails gracefully" tests, since it proves the console
+    sends the *correct* requests and correctly *renders* the response
+    shapes, not just that it doesn't crash when nothing answers. Confirmed
+    working end-to-end: signing in with real credentials against the mock,
+    adding + syncing a vCenter connection with the permissions table
+    populating from the mock's response body, running an extended DC check
+    with the replication/health lines rendering from real (mock) data,
+    sending a test email and seeing the real confirmation text, and the
+    Connection tab's "Test connection" showing "API reachable at
+    http://localhost:8780". Zero page errors across all of it. This mock
+    server is scratch-only (not part of the repo) - if a future session
+    wants to keep exercising Live mode without a real Windows/AD/SQL
+    server, it can be recreated from this description or from the
+    conversation transcript.
+  - **Installer de-duplication**: `Install.ps1` and `Install-DSMT.ps1` had
+    a verbatim ~30-line duplicate of the native Windows-service C# host
+    source plus the same http.sys URL ACL reservation logic - flagged as a
+    known issue in the 3.34.0 session but deliberately left alone then as
+    too large for that pass. Extracted into new `Register-DsmtService.ps1`
+    (a single `Register-DsmtApiService` function both installers
+    dot-source), removing 184 duplicated lines. Rewrote the relevant
+    sections of `README.md`, `Deployment_Guide.html`, and `CLAUDE.md`'s
+    file-mapping table to state clearly (this was the user's actual
+    confusion) that the two installers are **not competing ways to do the
+    same thing**: `Install-DSMT.ps1` is the recommended one-click path for
+    a *fresh* install; `Install.ps1` is a maintenance tool for an
+    *already-running* install (re-register the service after a manual file
+    copy, reset the local admin password, re-apply the schema) one step at
+    a time - deliberately kept both rather than deleting `Install.ps1`,
+    since those granular maintenance operations are real, ongoing needs
+    that the all-in-one installer doesn't cleanly support standalone.
+  - Verified: `Install.ps1`/`Install-DSMT.ps1`/`Register-DsmtService.ps1`
+    ASCII-checked (no `pwsh` in this sandbox to execute them for real -
+    same limitation as every PowerShell change this project). `index-new
+    .html` manifest + template both `json.loads()` clean, class-body
+    braces balanced, full Playwright regression across all sub-tabs of all
+    3 workspaces (zero errors), full wizard walkthrough in demo mode
+    (all 5 steps, Install, Installation complete, Finish returns to
+    sign-in with a toast) - zero errors, plus the mock-server-backed Live
+    verification described above.
+  - Version bumped to 3.36.0 (index-new.html's single About-modal string).
+  - **Caveat for next session**: same pattern as every prior session - all
+    of this lives in `index-new.html` only, not the shipped `index.html`.
+    The mock-server testing is a strong proxy for real-environment
+    verification but is still not the genuine article - `dcdiag.exe`,
+    `Get-ADReplicationPartnerMetadata`, VMware PowerCLI, `Send-MailMessage`,
+    and `Register-ScheduledTask` all still need a real Windows/AD/vCenter/
+    SMTP environment to fully validate, which the user has access to but
+    this sandbox does not.
 - **vCenter delegated (per-user) auth — considered, deferred (this
   session)**: user asked about connecting to vCenter/ESXi using the
   permissions of the signed-in domain user instead of the shared service
