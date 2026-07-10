@@ -308,8 +308,19 @@ pick up immediately.
        default, Settings -> Access & Permissions still works after a full
        workspace round-trip - zero page errors, manifest (25 keys) +
        template both `json.loads()` clean, braces/parens balanced.
-       (m) Event Viewer -
-       filters (server/log/level/hours/query) + results table, (n)
+       (m) **DONE (this session) - Event Viewer** - filter row (server
+       FQDN/log/severity/hours back/text filter) + Query button, and a
+       result table (Time/Level/Source/Event ID/Message) using
+       `sc-raw-table` aliases. Ported `EV_DATA` sample data from the real
+       `index.html` and `genEvents`'s empty-server-name guard. Verified
+       with Playwright: filter fields + empty state render, Query
+       populates a 5-row table (6 including header - confirms every row
+       rendered), clearing the server field and querying again shows the
+       expected warning toast instead of a blank/broken state, Settings
+       -> Access & Permissions still works after a full workspace
+       round-trip - zero page errors, manifest (25 keys) + template both
+       `json.loads()` clean, braces/parens balanced.
+       (n)
        Scheduled Jobs - table with enable/disable/run-now actions, (o)
        Groups - membership management + bulk actions, (p) User Management -
        full CRUD table, multi-select, offboarding flow (busiest page), (q)
