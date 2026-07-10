@@ -231,12 +231,19 @@ WHEN NOT MATCHED THEN INSERT(Username,ConsoleRole,PwHash,PwSalt,Iterations,Enabl
         # (surfaces as "Unexpected end of JSON input" client-side) instead of
         # a readable error - always give the console a JSON body to show.
         try {
-            $r = Invoke-SignIn -Config $cfg -Domain $b.domain -Username $b.username -Password $b.password
+            $r = Invoke-SignIn -Config $cfg -Domain $b.domain -Username $b.username -Password $b.password -MfaCode $b.mfaCode
         } catch {
             Write-Audit -Actor $b.username -Action 'Console sign-in' -Target 'console' -Result 'Error' -Kind 'auth' -Detail $_.Exception.Message -SourceIp $ip
             Set-PodeResponseStatus -Code 502; Write-PodeJsonResponse -Value @{ error = 'Directory unreachable: ' + $_.Exception.Message }; return
         }
         if (-not $r.Ok) {
+            # MfaRequired (password already checked out) is a distinct outcome from a
+            # denied sign-in - the console shows an MFA-code prompt instead of an
+            # error, but it must NOT create a session or count as success either way.
+            if ($r.MfaRequired) {
+                Write-Audit -Actor $b.username -Action 'Console sign-in (MFA challenge)' -Target 'console' -Result 'Denied' -Kind 'auth' -Detail $r.Reason -SourceIp $ip
+                Set-PodeResponseStatus -Code 401; Write-PodeJsonResponse -Value @{ error = $r.Reason; mfaRequired = $true }; return
+            }
             Write-Audit -Actor $b.username -Action 'Console sign-in' -Target 'console' -Result 'Denied' -Kind 'auth' -Detail $r.Reason -SourceIp $ip
             Set-PodeResponseStatus -Code 401; Write-PodeJsonResponse -Value @{ error = $r.Reason }; return
         }
@@ -258,6 +265,73 @@ WHEN NOT MATCHED THEN INSERT(Username,ConsoleRole,PwHash,PwSalt,Iterations,Enabl
         $s = Get-Session $WebEvent
         if ($s) { Invoke-Sql 'DELETE FROM dbo.Sessions WHERE Token=@t' @{ t=$s.token } -NonQuery | Out-Null }
         Write-PodeJsonResponse -Value @{ ok=$true }
+    }
+
+    # ---------- MFA (TOTP) enrollment - local accounts only ----------
+    # Two-step enrollment: /setup generates and stores a secret (not yet
+    # active), the console shows it as a QR/manual-entry code, then /enable
+    # proves the user actually captured it correctly before it starts being
+    # required at sign-in - avoids locking someone out with a secret they
+    # never actually saved.
+    Add-PodeRoute -Method Post -Path '/api/auth/mfa/setup' -ScriptBlock {
+        $s = Get-Session $WebEvent; if (-not $s) { Write-401; return }
+        if (-not $s.isLocal) { Set-PodeResponseStatus -Code 400; Write-PodeJsonResponse -Value @{ ok=$false; error='MFA is only available for local accounts.' }; return }
+        $secret = New-TotpSecret
+        Invoke-Sql 'UPDATE dbo.LocalAccounts SET MfaSecret=@sec, MfaEnabled=0 WHERE Username=@u' @{ sec=$secret; u=$s.username } -NonQuery | Out-Null
+        Write-Audit -Actor $s.username -Action 'MFA enrollment started' -Target $s.username -Result 'Success' -Kind 'auth'
+        Write-PodeJsonResponse -Value @{ ok=$true; secret=$secret; otpauth=(Get-TotpUri -Base32Secret $secret -Username $s.username) }
+    }
+    Add-PodeRoute -Method Post -Path '/api/auth/mfa/enable' -ScriptBlock {
+        $s = Get-Session $WebEvent; if (-not $s) { Write-401; return }
+        $row = Invoke-Sql 'SELECT TOP 1 MfaSecret FROM dbo.LocalAccounts WHERE Username=@u' @{ u=$s.username }
+        $secret = if ($row -and $row.Count -gt 0) { [string]$row[0]['MfaSecret'] } else { $null }
+        if ([string]::IsNullOrWhiteSpace($secret)) { Set-PodeResponseStatus -Code 400; Write-PodeJsonResponse -Value @{ ok=$false; error='Call /api/auth/mfa/setup first.' }; return }
+        if (-not (Test-TotpCode -Base32Secret $secret -Code $WebEvent.Data.code)) {
+            Write-Audit -Actor $s.username -Action 'MFA enable' -Target $s.username -Result 'Denied' -Kind 'auth' -Detail 'Invalid code'
+            Set-PodeResponseStatus -Code 400; Write-PodeJsonResponse -Value @{ ok=$false; error='Invalid code.' }; return
+        }
+        Invoke-Sql 'UPDATE dbo.LocalAccounts SET MfaEnabled=1 WHERE Username=@u' @{ u=$s.username } -NonQuery | Out-Null
+        Write-Audit -Actor $s.username -Action 'MFA enabled' -Target $s.username -Result 'Success' -Kind 'auth'
+        Write-PodeJsonResponse -Value @{ ok=$true }
+    }
+    Add-PodeRoute -Method Post -Path '/api/auth/mfa/disable' -ScriptBlock {
+        $s = Get-Session $WebEvent; if (-not $s) { Write-401; return }
+        Invoke-Sql 'UPDATE dbo.LocalAccounts SET MfaEnabled=0, MfaSecret=NULL WHERE Username=@u' @{ u=$s.username } -NonQuery | Out-Null
+        Write-Audit -Actor $s.username -Action 'MFA disabled' -Target $s.username -Result 'Success' -Kind 'auth'
+        Write-PodeJsonResponse -Value @{ ok=$true }
+    }
+
+    # ---------- SSO (Windows Integrated Auth via IIS) ----------
+    # DSMT itself never negotiates Kerberos/NTLM - that handshake happens in
+    # IIS in front of the console (Windows Authentication enabled on the site,
+    # see Deployment_Guide.html). IIS forwards the already-authenticated
+    # Windows identity in a header via the reverse-proxy rule; this route only
+    # trusts that header when SsoEnabled is explicitly turned on, and maps the
+    # user through the exact same group -> role resolution as a normal domain
+    # sign-in (no separate access grant for SSO).
+    Add-PodeRoute -Method Post -Path '/api/auth/sso' -ScriptBlock {
+        $cfg = $using:Config
+        $ip = $WebEvent.Request.RemoteEndPoint.Address.ToString()
+        if (-not [bool]$cfg.Directory.SsoEnabled) {
+            Set-PodeResponseStatus -Code 400; Write-PodeJsonResponse -Value @{ ok=$false; error='SSO is not enabled.' }; return
+        }
+        $winUser = $WebEvent.Request.Headers['X-Windows-User']
+        if ([string]::IsNullOrWhiteSpace($winUser)) {
+            Set-PodeResponseStatus -Code 401; Write-PodeJsonResponse -Value @{ ok=$false; error='No Windows identity was forwarded by IIS - check Windows Authentication is enabled on the site.' }; return
+        }
+        $sam = ($winUser -replace '^.*\\', '')
+        $groups = Get-UserGroups -Server $cfg.Directory.LdapServer -BaseDN $cfg.Directory.BaseDN -SamAccountName $sam
+        $role = Resolve-ConsoleRole -Groups $groups
+        if (-not $role) {
+            Write-Audit -Actor $sam -Action 'SSO sign-in' -Target 'console' -Result 'Denied' -Kind 'auth' -Detail 'Not a member of any group mapped for console access' -SourceIp $ip
+            Set-PodeResponseStatus -Code 401; Write-PodeJsonResponse -Value @{ ok=$false; error='Not a member of any group mapped for console access' }; return
+        }
+        $token = New-Token
+        $ttl = [int]$cfg.Api.TokenTtlHours
+        Invoke-Sql 'INSERT INTO dbo.Sessions(Token,Username,ConsoleRole,IsLocal,ExpiresAt) VALUES(@t,@u,@r,0,DATEADD(hour,@h,SYSUTCDATETIME()))' `
+            @{ t=$token; u=$sam; r=$role; h=$ttl } -NonQuery | Out-Null
+        Write-Audit -Actor $sam -Action 'SSO sign-in' -Target 'console' -Result 'Success' -Kind 'auth' -SourceIp $ip
+        Write-PodeJsonResponse -Value @{ ok=$true; token=$token; displayName=$sam; role=$role; isLocal=$false }
     }
 
     # ---------- HEALTH ----------
@@ -295,7 +369,7 @@ WHEN NOT MATCHED THEN INSERT(Username,ConsoleRole,PwHash,PwSalt,Iterations,Enabl
         # actually saved. Both stores are returned for backward compatibility.
         $cfg = $using:Config
         Write-PodeJsonResponse -Value @{
-            directory = @{ ldapServer = $cfg.Directory.LdapServer; baseDN = $cfg.Directory.BaseDN; domains = @($cfg.Directory.Domains) }
+            directory = @{ ldapServer = $cfg.Directory.LdapServer; baseDN = $cfg.Directory.BaseDN; domains = @($cfg.Directory.Domains); ssoEnabled = [bool]$cfg.Directory.SsoEnabled }
             sql       = (Get-Config)
         }
     }
@@ -741,6 +815,10 @@ WHEN NOT MATCHED THEN INSERT(Username,ConsoleRole,PwHash,PwSalt,Iterations,Enabl
         if ($d.directory) {
             if ($d.directory.ldapServer) { $cfg.Directory.LdapServer = $d.directory.ldapServer }
             if ($d.directory.baseDN)     { $cfg.Directory.BaseDN     = $d.directory.baseDN }
+            if ($null -ne $d.directory.ssoEnabled) {
+                $cfg.Directory.SsoEnabled = [bool]$d.directory.ssoEnabled
+                Write-Audit -Actor $s.username -Action $(if([bool]$d.directory.ssoEnabled){'SSO enabled'}else{'SSO disabled'}) -Target 'console' -Result 'Success' -Kind 'auth'
+            }
         }
         try { Save-Config -Cfg $cfg -Path $using:cfgPath; Write-PodeJsonResponse -Value @{ ok=$true } }
         catch { Set-PodeResponseStatus -Code 400; Write-PodeJsonResponse -Value @{ ok=$false; error=$_.Exception.Message } }

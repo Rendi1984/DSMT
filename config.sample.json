@@ -30,7 +30,8 @@
     "UseSsl": false,
     "Domains": ["lab.local", "corp.lab.local"],
     "BindUser": "",
-    "BindPassword": ""
+    "BindPassword": "",
+    "SsoEnabled": false
   },
 
   "Sync": {

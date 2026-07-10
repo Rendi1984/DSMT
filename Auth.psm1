@@ -30,15 +30,100 @@ function Test-PasswordHash {
 
 # ---------- Local accounts ----------
 function Test-LocalAccount {
+    # Returns $null on any failure. On password success it always returns an
+    # object so the caller can inspect MfaRequired - a $null return must mean
+    # "reject the sign-in", never "let me check MFA later", otherwise a wrong
+    # password could be masked by an MFA prompt.
     param([string] $Username, [string] $Password)
-    $rows = Invoke-Sql 'SELECT TOP 1 Username,ConsoleRole,PwHash,PwSalt,Iterations,Enabled FROM dbo.LocalAccounts WHERE Username=@u' @{ u = $Username }
+    $rows = Invoke-Sql 'SELECT TOP 1 Username,ConsoleRole,PwHash,PwSalt,Iterations,Enabled,MfaEnabled,MfaSecret FROM dbo.LocalAccounts WHERE Username=@u' @{ u = $Username }
     if (-not $rows -or $rows.Count -eq 0) { return $null }
     $r = $rows[0]
     if (-not [bool]$r['Enabled']) { return $null }
-    if (Test-PasswordHash $Password $r['PwHash'] $r['PwSalt'] ([int]$r['Iterations'])) {
-        return [pscustomobject]@{ Username = $r['Username']; Role = $r['ConsoleRole']; IsLocal = $true }
+    if (-not (Test-PasswordHash $Password $r['PwHash'] $r['PwSalt'] ([int]$r['Iterations']))) { return $null }
+    return [pscustomobject]@{
+        Username     = $r['Username']
+        Role         = $r['ConsoleRole']
+        IsLocal      = $true
+        MfaEnabled   = [bool]$r['MfaEnabled']
+        MfaSecret    = [string]$r['MfaSecret']
     }
-    return $null
+}
+
+# ---------- MFA (TOTP, RFC 6238 / RFC 4226) ----------
+# Self-contained (no external module) - Base32 secret + HMAC-SHA1-based
+# 6-digit code, 30-second step, compatible with Google/Microsoft Authenticator.
+function New-TotpSecret {
+    # 20 random bytes (160 bits) is the RFC-recommended secret length for HMAC-SHA1.
+    $bytes = New-Object byte[] 20
+    [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes)
+    return ConvertTo-Base32 -Bytes $bytes
+}
+
+function ConvertTo-Base32 {
+    param([Parameter(Mandatory)][byte[]] $Bytes)
+    $alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'
+    $bits = ''
+    foreach ($b in $Bytes) { $bits += [Convert]::ToString($b, 2).PadLeft(8, '0') }
+    $out = New-Object System.Text.StringBuilder
+    for ($i = 0; $i -lt $bits.Length; $i += 5) {
+        $chunk = $bits.Substring($i, [Math]::Min(5, $bits.Length - $i)).PadRight(5, '0')
+        [void]$out.Append($alphabet[[Convert]::ToInt32($chunk, 2)])
+    }
+    return $out.ToString()
+}
+
+function ConvertFrom-Base32 {
+    param([Parameter(Mandatory)][string] $Text)
+    $alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'
+    $clean = $Text.ToUpperInvariant() -replace '[^A-Z2-7]', ''
+    $bits = ''
+    foreach ($c in $clean.ToCharArray()) { $bits += [Convert]::ToString($alphabet.IndexOf($c), 2).PadLeft(5, '0') }
+    $byteCount = [Math]::Floor($bits.Length / 8)
+    $bytes = New-Object byte[] $byteCount
+    for ($i = 0; $i -lt $byteCount; $i++) { $bytes[$i] = [Convert]::ToByte($bits.Substring($i * 8, 8), 2) }
+    return $bytes
+}
+
+function Get-TotpCode {
+    # RFC 6238: HOTP(secret, floor(unixTime / 30)), dynamically truncated to 6 digits.
+    param([Parameter(Mandatory)][string] $Base32Secret, [int] $TimeStep = 30, [long] $Counter = -1)
+    $key = ConvertFrom-Base32 -Text $Base32Secret
+    if ($Counter -lt 0) {
+        $unixTime = [long]([DateTimeOffset]::UtcNow.ToUnixTimeSeconds())
+        $Counter = [Math]::Floor($unixTime / $TimeStep)
+    }
+    $counterBytes = [BitConverter]::GetBytes([long]$Counter)
+    if ([BitConverter]::IsLittleEndian) { [Array]::Reverse($counterBytes) }
+    $hmac = New-Object System.Security.Cryptography.HMACSHA1(,$key)
+    $hash = $hmac.ComputeHash($counterBytes)
+    $offset = $hash[$hash.Length - 1] -band 0x0F
+    $binCode = (($hash[$offset] -band 0x7F) -shl 24) -bor `
+               (($hash[$offset + 1] -band 0xFF) -shl 16) -bor `
+               (($hash[$offset + 2] -band 0xFF) -shl 8) -bor `
+               ($hash[$offset + 3] -band 0xFF)
+    return ('{0:D6}' -f ($binCode % 1000000))
+}
+
+function Test-TotpCode {
+    # Accepts the current 30s window plus one step either side, to tolerate
+    # normal clock drift between the server and the user's phone.
+    param([Parameter(Mandatory)][string] $Base32Secret, [Parameter(Mandatory)][string] $Code, [int] $Window = 1)
+    if ([string]::IsNullOrWhiteSpace($Code)) { return $false }
+    $code = $Code.Trim()
+    $unixTime = [long]([DateTimeOffset]::UtcNow.ToUnixTimeSeconds())
+    $baseCounter = [Math]::Floor($unixTime / 30)
+    for ($i = -$Window; $i -le $Window; $i++) {
+        if ((Get-TotpCode -Base32Secret $Base32Secret -Counter ($baseCounter + $i)) -eq $code) { return $true }
+    }
+    return $false
+}
+
+function Get-TotpUri {
+    # otpauth:// URI for manual entry / QR generation client-side.
+    param([Parameter(Mandatory)][string] $Base32Secret, [Parameter(Mandatory)][string] $Username, [string] $Issuer = 'DSMT')
+    $label = [Uri]::EscapeDataString("$Issuer`:$Username")
+    $iss   = [Uri]::EscapeDataString($Issuer)
+    return "otpauth://totp/$label?secret=$Base32Secret&issuer=$iss&algorithm=SHA1&digits=6&period=30"
 }
 
 # ---------- LDAP bind + group membership ----------
@@ -97,13 +182,19 @@ function Resolve-ConsoleRole {
 function Invoke-SignIn {
     param(
         [Parameter(Mandatory)] $Config,
-        [string] $Domain, [string] $Username, [string] $Password
+        [string] $Domain, [string] $Username, [string] $Password, [string] $MfaCode = $null
     )
     # Local account path (domain-independent break-glass)
     if ($Domain -eq 'Local account' -or $Domain -eq 'local') {
         $local = Test-LocalAccount -Username $Username -Password $Password
-        if ($local) { return [pscustomobject]@{ Ok=$true; Username=$local.Username; Role=$local.Role; IsLocal=$true } }
-        return [pscustomobject]@{ Ok=$false; Reason='Invalid local credentials' }
+        if (-not $local) { return [pscustomobject]@{ Ok=$false; Reason='Invalid local credentials' } }
+        if ($local.MfaEnabled) {
+            if ([string]::IsNullOrWhiteSpace($MfaCode)) { return [pscustomobject]@{ Ok=$false; MfaRequired=$true; Reason='MFA code required' } }
+            if (-not (Test-TotpCode -Base32Secret $local.MfaSecret -Code $MfaCode)) {
+                return [pscustomobject]@{ Ok=$false; MfaRequired=$true; Reason='Invalid MFA code' }
+            }
+        }
+        return [pscustomobject]@{ Ok=$true; Username=$local.Username; Role=$local.Role; IsLocal=$true }
     }
 
     # Domain path: real LDAP bind
@@ -122,4 +213,5 @@ function Invoke-SignIn {
 }
 
 Export-ModuleMember -Function New-PasswordHash, Test-PasswordHash, Test-LocalAccount,
-    Test-LdapCredential, Get-UserGroups, Resolve-ConsoleRole, Invoke-SignIn
+    Test-LdapCredential, Get-UserGroups, Resolve-ConsoleRole, Invoke-SignIn,
+    New-TotpSecret, Get-TotpCode, Test-TotpCode, Get-TotpUri, ConvertTo-Base32, ConvertFrom-Base32

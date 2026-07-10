@@ -718,9 +718,33 @@ notepad config.json</pre><p>Set <strong>Database</strong>, <strong>Directory</st
         <p>Creating a local break-glass account now has its own password field in the form (3.32.2+) - a browser <code>prompt()</code> popup used to ask for it separately, which read as if the dialog wanted the username again since it echoed it back in the message text.</p>
         <div class="callout warn" style="margin:12px 0 0;">
           <div class="dot"></div>
-          <p><strong>MFA is console-side only</strong> Enabling it prompts for a 6-digit code, but the API does not verify it server-side yet — don't rely on it as your only second factor in production.</p>
+          <p><strong>MFA/SSO backend is real (3.33.0); console wiring is preview-only</strong> The API now genuinely verifies a TOTP code server-side (RFC 6238, <code>Auth.psm1</code>) and can trust an IIS-forwarded Windows identity for SSO — see “Two-factor authentication (MFA)” and “Single sign-on (SSO)” below. Turning the toggles on/off and completing enrollment currently only works from the <code>index-new.html</code> redesign preview, not yet the shipped <code>index.html</code> console.</p>
         </div>
-        <div class="feature-meta"><code>GET/POST/DELETE /api/access/mappings</code><code>GET/POST /api/access/local</code><code>POST /api/access/local/:id/toggle</code><code>POST /api/access/require-group</code></div>
+        <div class="feature-meta"><code>GET/POST/DELETE /api/access/mappings</code><code>GET/POST /api/access/local</code><code>POST /api/access/local/:id/toggle</code><code>POST /api/config</code> (<code>directory.ssoEnabled</code>)</div>
+      </div>
+
+      <div class="feature" id="f-mfa">
+        <div class="feature-head"><h3>Two-factor authentication (MFA)</h3></div>
+        <p><strong>Added in 3.33.0.</strong> Protects the local break-glass administrator account with a standard 6-digit TOTP code (compatible with Google/Microsoft Authenticator, Authy, etc.) — RFC 6238, HMAC-SHA1, 30-second step, self-contained in <code>Auth.psm1</code> (no external PowerShell module needed). Domain sign-in (LDAP bind + group mapping) is unaffected — MFA here specifically hardens the emergency local admin account.</p>
+        <h4>To configure</h4>
+        <p>Sign in as the local administrator, open Access &amp; Permissions, turn on “Require two-factor authentication (MFA)”. The console calls <code>POST /api/auth/mfa/setup</code>, which returns a Base32 secret and an <code>otpauth://</code> URI — enter the secret manually into your authenticator app (there is no QR-code image renderer yet, deliberately kept offline/dependency-free), then type the 6-digit code it shows into the confirm box. That calls <code>POST /api/auth/mfa/enable</code>, which verifies the code before turning MFA on — so you can't lock yourself out with a secret you never actually saved. From then on, local sign-in requires <code>password + code</code> in the same login call; the API responds with <code>mfaRequired:true</code> (not a plain 401) so the console shows a code prompt instead of an error. Turn it off any time from the same toggle (<code>POST /api/auth/mfa/disable</code>).</p>
+        <div class="callout warn" style="margin:12px 0 0;">
+          <div class="dot"></div>
+          <p><strong>Existing installs</strong> Re-run <code>Invoke-DbMigrate</code> (or hit “Run migrations” in Settings → Database) after upgrading — <code>schema.sql</code> adds two nullable/defaulted columns (<code>MfaEnabled</code>, <code>MfaSecret</code>) to <code>dbo.LocalAccounts</code> via an idempotent <code>ALTER TABLE</code>, safe to re-run.</p>
+        </div>
+        <div class="feature-meta"><code>POST /api/auth/mfa/setup</code><code>POST /api/auth/mfa/enable</code><code>POST /api/auth/mfa/disable</code><code>POST /api/auth/login</code> (<code>mfaCode</code>)</div>
+      </div>
+
+      <div class="feature" id="f-sso">
+        <div class="feature-head"><h3>Single sign-on (SSO)</h3></div>
+        <p><strong>Added in 3.33.0.</strong> DSMT itself never negotiates Kerberos/NTLM — IIS does that handshake in front of the console when Windows Authentication is enabled on the site, then forwards the already-authenticated identity to the API in an <code>X-Windows-User</code> header (see <code>iis-reverse-proxy.web.config</code>). The API only trusts that header when <code>Directory.SsoEnabled</code> is explicitly turned on, and maps the user through the exact same LDAP group → role resolution as a normal domain sign-in — there is no separate access grant for SSO.</p>
+        <h4>To configure</h4>
+        <ol>
+          <li>In IIS Manager, select the DSMT site → <strong>Authentication</strong> → enable <strong>Windows Authentication</strong>, disable <strong>Anonymous Authentication</strong> (or leave both on and let the reverse-proxy rule forward the resolved identity — see your <code>iis-reverse-proxy.web.config</code> rewrite rule for the exact header name).</li>
+          <li>Turn on “Allow Windows / SSO sign-in” in Access &amp; Permissions (Live mode) — this calls <code>POST /api/config</code> and persists <code>Directory.SsoEnabled: true</code> to <code>config.json</code>.</li>
+          <li>The login screen now shows a “Sign in with Windows” button, which calls <code>POST /api/auth/sso</code> with no credentials — IIS has already done the authentication.</li>
+        </ol>
+        <div class="feature-meta"><code>POST /api/auth/sso</code><code>POST /api/config</code> (<code>directory.ssoEnabled</code>)</div>
       </div>
 
       <div class="feature" id="f-data">
@@ -842,7 +866,7 @@ notepad config.json</pre><p>Set <strong>Database</strong>, <strong>Directory</st
 
     <div class="callout note" style="margin-top:60px;">
       <div class="dot"></div>
-      <p><strong>Version</strong> This guide describes DSMT 3.29.22. See <code>CHANGELOG.md</code> for the full release history.</p>
+      <p><strong>Version</strong> This guide describes DSMT 3.33.0 (index-new.html preview) / 3.32.3 (shipped index.html console). See <code>CHANGELOG.md</code> for the full release history.</p>
     </div>
   </main>
 </div>
