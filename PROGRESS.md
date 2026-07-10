@@ -370,9 +370,25 @@ pick up immediately.
        after a full workspace round-trip - zero page errors, manifest
        (25 keys) + template both `json.loads()` clean, braces/parens
        balanced.
-       (q)
-       Certificate Authority - cert lifecycle table + templates +
-       issue/renew/revoke actions, (r) Diagnostics - 2 sub-tabs (Domain
+       (q) **DONE (this session) - Certificate Authority** - CA identity
+       card (name/expiry/CRL/key info + Publish CRL/Backup CA) + a 2x2
+       stat-tile grid, a conditional Pending requests card (Approve &amp;
+       issue/Deny, hidden entirely when empty), an Issued certificates
+       table with status filters using `sc-raw-table` aliases, and a
+       Certificate templates grid. Ported `pending`/`certs`/
+       `CA_TEMPLATES` sample data and `publishCrl`/`backupCa`/
+       `approveCert`/`denyCert`/`revokeCert` from the real `index.html`.
+       Verified with Playwright: CA card/tiles/pending/table/templates all
+       render, Approve moves a request into the certs table with a new
+       serial, Deny removes it (confirmed via the "Pending requests: 0"
+       tile, not just card visibility - the tile label text overlaps the
+       card's heading so a naive text-absence check is a false negative,
+       not a real bug), the Expiring filter narrows the table correctly,
+       Revoke/Publish CRL/Backup CA all show their toasts, Settings ->
+       Access & Permissions still works after a full workspace round-trip
+       - zero page errors, manifest (25 keys) + template both
+       `json.loads()` clean, braces/parens balanced.
+       (r) Diagnostics - 2 sub-tabs (Domain
        Controllers / Exchange), each with its own test/send panel (most
        moving parts).
      - **Global chrome** (touches everything, do last among the structural
