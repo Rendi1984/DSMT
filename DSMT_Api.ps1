@@ -17,6 +17,10 @@
     GET  /api/audit?kind=
     GET  /api/ca/certs | /api/ca/pending
     POST /api/ca/publish-crl | /api/ca/revoke | /api/ca/approve/:id | /api/ca/deny/:id
+    GET/POST /api/settings/smtp -> saved SMTP server config
+    GET  /api/diag/dcs?extended=true -> + replication + dcdiag health per DC
+    GET/POST/DELETE /api/diag/schedule -> scheduled diagnostics report (Windows Task Scheduler)
+    POST /api/diag/report/run -> run the diagnostics report immediately
 #>
 
 $ErrorActionPreference = 'Stop'
@@ -678,7 +682,20 @@ WHEN NOT MATCHED THEN INSERT(Username,ConsoleRole,PwHash,PwSalt,Iterations,Enabl
         if (-not (Get-Session $WebEvent)) { Write-401; return }
         $m = if ($WebEvent.Query['method']) { $WebEvent.Query['method'] } else { 'auto' }
         $hosts = Get-DomainControllers -Method $m
-        Write-PodeJsonResponse -Value @{ controllers = @(Test-DcServices -Hosts $hosts) }
+        $controllers = @(Test-DcServices -Hosts $hosts)
+        # Extended mode adds replication + dcdiag health per host, on top of
+        # the plain service probe - opt-in via query param since both are
+        # slower (dcdiag can take 10-30s per host) and not every caller wants
+        # to pay that cost (e.g. a quick dashboard refresh).
+        if ($WebEvent.Query['extended'] -eq 'true' -and $hosts.Count -gt 0) {
+            $repl = @{}
+            try { foreach ($r in (Test-DcReplication -Hosts $hosts)) { $repl[$r.host] = $r } } catch {}
+            foreach ($c in $controllers) {
+                $c | Add-Member -NotePropertyName replication -NotePropertyValue $repl[$c.host] -Force
+                $c | Add-Member -NotePropertyName health -NotePropertyValue (Test-DcHealth -DcHost $c.host) -Force
+            }
+        }
+        Write-PodeJsonResponse -Value @{ controllers = $controllers }
     }
     Add-PodeRoute -Method Post -Path '/api/diag/exchange' -ScriptBlock {
         if (-not (Get-Session $WebEvent)) { Write-401; return }
@@ -690,10 +707,128 @@ WHEN NOT MATCHED THEN INSERT(Username,ConsoleRole,PwHash,PwSalt,Iterations,Enabl
     }
     Add-PodeRoute -Method Post -Path '/api/diag/message' -ScriptBlock {
         $s = Get-Session $WebEvent; if (-not $s) { Write-401; return }
+        $cfg = $using:Config
         $sim = [bool]$WebEvent.Data.simulate
-        $r = Send-TestMessage -SmtpServer $WebEvent.Data.smtp -To $WebEvent.Data.to -From $WebEvent.Data.from -Subject $WebEvent.Data.subject -Body $WebEvent.Data.body -Port ([int]$WebEvent.Data.port) -Simulate:$sim -Username $WebEvent.Data.username -Password $WebEvent.Data.password -UseTls:([bool]$WebEvent.Data.useTls)
+        # Falls back to the saved SMTP config (Settings -> Notifications) for
+        # any field the caller didn't supply - the console's "send test
+        # email" button only needs a To address once the server is set up
+        # once, instead of re-typing host/port/credentials every time.
+        $smtpServer = if ($WebEvent.Data.smtp) { $WebEvent.Data.smtp } else { $cfg.Smtp.Server }
+        $port       = if ($WebEvent.Data.port) { [int]$WebEvent.Data.port } else { [int]$cfg.Smtp.Port }
+        $from       = if ($WebEvent.Data.from) { $WebEvent.Data.from } else { $cfg.Smtp.From }
+        $username   = if ($null -ne $WebEvent.Data.username -and $WebEvent.Data.username -ne '') { $WebEvent.Data.username } else { $cfg.Smtp.Username }
+        $password   = if ($null -ne $WebEvent.Data.password -and $WebEvent.Data.password -ne '') { $WebEvent.Data.password } else { $cfg.Smtp.Password }
+        $useTls     = if ($null -ne $WebEvent.Data.useTls) { [bool]$WebEvent.Data.useTls } else { [bool]$cfg.Smtp.UseTls }
+        if ([string]::IsNullOrWhiteSpace($smtpServer)) {
+            Set-PodeResponseStatus -Code 400; Write-PodeJsonResponse -Value @{ ok=$false; error='No SMTP server configured - set one in Settings > Notifications first.' }; return
+        }
+        $r = Send-TestMessage -SmtpServer $smtpServer -To $WebEvent.Data.to -From $from -Subject $WebEvent.Data.subject -Body $WebEvent.Data.body -Port $port -Simulate:$sim -Username $username -Password $password -UseTls:$useTls
         Write-Audit -Actor $s.username -Action $(if($sim){'Test message simulated'}else{'Test message sent'}) -Target $WebEvent.Data.to -Result $(if($r.ok){'Success'}else{'Error'}) -Kind 'diag'
         Write-PodeJsonResponse -Value $r
+    }
+
+    # ---------- SMTP CONFIG (Settings -> Notifications) ----------
+    Add-PodeRoute -Method Get -Path '/api/settings/smtp' -ScriptBlock {
+        if (-not (Get-Session $WebEvent)) { Write-401; return }
+        $cfg = $using:Config
+        # Password is never sent back to the browser - the console shows a
+        # "saved" placeholder instead, same pattern as every other secret
+        # field in this app.
+        Write-PodeJsonResponse -Value @{ server=$cfg.Smtp.Server; port=$cfg.Smtp.Port; from=$cfg.Smtp.From; username=$cfg.Smtp.Username; hasPassword=(-not [string]::IsNullOrWhiteSpace($cfg.Smtp.Password)); useTls=[bool]$cfg.Smtp.UseTls }
+    }
+    Add-PodeRoute -Method Post -Path '/api/settings/smtp' -ScriptBlock {
+        $s = Get-Session $WebEvent; if (-not $s) { Write-401; return }
+        $cfg = $using:Config
+        $d = $WebEvent.Data
+        if (-not $cfg.Smtp) { $cfg | Add-Member -NotePropertyName Smtp -NotePropertyValue ([pscustomobject]@{}) -Force }
+        if ($null -ne $d.server)   { $cfg.Smtp.Server   = $d.server }
+        if ($null -ne $d.port)     { $cfg.Smtp.Port     = [int]$d.port }
+        if ($null -ne $d.from)     { $cfg.Smtp.From     = $d.from }
+        if ($null -ne $d.username) { $cfg.Smtp.Username = $d.username }
+        if ($null -ne $d.password -and $d.password -ne '') { $cfg.Smtp.Password = $d.password }
+        if ($null -ne $d.useTls)   { $cfg.Smtp.UseTls   = [bool]$d.useTls }
+        try { Save-Config -Cfg $cfg -Path $using:cfgPath; Write-Audit -Actor $s.username -Action 'SMTP settings saved' -Target $cfg.Smtp.Server -Result 'Success' -Kind 'diag'; Write-PodeJsonResponse -Value @{ ok=$true } }
+        catch { Set-PodeResponseStatus -Code 400; Write-PodeJsonResponse -Value @{ ok=$false; error=$_.Exception.Message } }
+    }
+
+    # ---------- SCHEDULED DIAGNOSTICS REPORT ----------
+    # A Windows scheduled task ('DSMT-DiagReport') runs Send-DiagReport.ps1
+    # on the configured cadence; the task itself carries no parameters -
+    # everything it needs (hosts, recipients, SMTP) lives in config.json,
+    # so changing the schedule here never requires re-registering with new
+    # arguments, only the trigger time/frequency changes.
+    Add-PodeRoute -Method Get -Path '/api/diag/schedule' -ScriptBlock {
+        if (-not (Get-Session $WebEvent)) { Write-401; return }
+        $cfg = $using:Config
+        $task = Get-ScheduledTask -TaskName 'DSMT-DiagReport' -ErrorAction SilentlyContinue
+        $info = if ($task) { Get-ScheduledTaskInfo -InputObject $task } else { $null }
+        Write-PodeJsonResponse -Value @{
+            enabled = [bool]$cfg.Diagnostics.ReportEnabled
+            frequency = $cfg.Diagnostics.ReportFrequency; dayOfWeek = $cfg.Diagnostics.ReportDayOfWeek; time = $cfg.Diagnostics.ReportTime
+            dcHosts = $cfg.Diagnostics.DcHosts; exchangeHosts = $cfg.Diagnostics.ExchangeHosts; recipients = $cfg.Diagnostics.ReportRecipients
+            registered = [bool]$task
+            lastRunTime = if ($info) { "$($info.LastRunTime)" } else { $null }
+            lastResult  = if ($info) { $info.LastTaskResult } else { $null }
+            nextRunTime = if ($info) { "$($info.NextRunTime)" } else { $null }
+        }
+    }
+    Add-PodeRoute -Method Post -Path '/api/diag/schedule' -ScriptBlock {
+        $s = Get-Session $WebEvent; if (-not $s) { Write-401; return }
+        $cfg = $using:Config
+        $d = $WebEvent.Data
+        if (-not $cfg.Diagnostics) { $cfg | Add-Member -NotePropertyName Diagnostics -NotePropertyValue ([pscustomobject]@{}) -Force }
+        $cfg.Diagnostics.ReportEnabled    = [bool]$d.enabled
+        $cfg.Diagnostics.ReportFrequency  = [string]$d.frequency
+        $cfg.Diagnostics.ReportDayOfWeek  = [string]$d.dayOfWeek
+        $cfg.Diagnostics.ReportTime       = [string]$d.time
+        $cfg.Diagnostics.DcHosts          = [string]$d.dcHosts
+        $cfg.Diagnostics.ExchangeHosts    = [string]$d.exchangeHosts
+        $cfg.Diagnostics.ReportRecipients = [string]$d.recipients
+        try {
+            Save-Config -Cfg $cfg -Path $using:cfgPath
+            Unregister-ScheduledTask -TaskName 'DSMT-DiagReport' -Confirm:$false -ErrorAction SilentlyContinue
+            if ($cfg.Diagnostics.ReportEnabled) {
+                $scriptPath = Join-Path $using:here 'Send-DiagReport.ps1'
+                $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$scriptPath`""
+                $trigger = if ($cfg.Diagnostics.ReportFrequency -eq 'Weekly') {
+                    New-ScheduledTaskTrigger -Weekly -DaysOfWeek $cfg.Diagnostics.ReportDayOfWeek -At $cfg.Diagnostics.ReportTime
+                } else {
+                    New-ScheduledTaskTrigger -Daily -At $cfg.Diagnostics.ReportTime
+                }
+                Register-ScheduledTask -TaskName 'DSMT-DiagReport' -Action $action -Trigger $trigger -RunLevel Highest -User 'SYSTEM' -Force | Out-Null
+            }
+            Write-Audit -Actor $s.username -Action $(if($cfg.Diagnostics.ReportEnabled){'Diagnostics report scheduled'}else{'Diagnostics report schedule disabled'}) -Target $cfg.Diagnostics.ReportRecipients -Result 'Success' -Kind 'diag'
+            Write-PodeJsonResponse -Value @{ ok=$true }
+        } catch {
+            Set-PodeResponseStatus -Code 400; Write-PodeJsonResponse -Value @{ ok=$false; error=$_.Exception.Message }
+        }
+    }
+    Add-PodeRoute -Method Delete -Path '/api/diag/schedule' -ScriptBlock {
+        $s = Get-Session $WebEvent; if (-not $s) { Write-401; return }
+        $cfg = $using:Config
+        try {
+            Unregister-ScheduledTask -TaskName 'DSMT-DiagReport' -Confirm:$false -ErrorAction SilentlyContinue
+            $cfg.Diagnostics.ReportEnabled = $false
+            Save-Config -Cfg $cfg -Path $using:cfgPath
+            Write-Audit -Actor $s.username -Action 'Diagnostics report schedule removed' -Target 'DSMT-DiagReport' -Result 'Success' -Kind 'diag'
+            Write-PodeJsonResponse -Value @{ ok=$true }
+        } catch { Set-PodeResponseStatus -Code 400; Write-PodeJsonResponse -Value @{ ok=$false; error=$_.Exception.Message } }
+    }
+    Add-PodeRoute -Method Post -Path '/api/diag/report/run' -ScriptBlock {
+        $s = Get-Session $WebEvent; if (-not $s) { Write-401; return }
+        $cfg = $using:Config
+        $dcHosts = @($cfg.Diagnostics.DcHosts -split '[,;\r\n]+' | Where-Object { $_ })
+        $exHosts = @($cfg.Diagnostics.ExchangeHosts -split '[,;\r\n]+' | Where-Object { $_ })
+        $recipients = @($cfg.Diagnostics.ReportRecipients -split '[,;\r\n]+' | Where-Object { $_ })
+        if ($recipients.Count -eq 0) { Set-PodeResponseStatus -Code 400; Write-PodeJsonResponse -Value @{ ok=$false; error='No report recipients configured.' }; return }
+        try {
+            $r = Send-DiagnosticsReport -Smtp $cfg.Smtp -DcHosts $dcHosts -ExchangeHosts $exHosts -Recipients $recipients
+            Write-Audit -Actor $s.username -Action 'Diagnostics report run (manual)' -Target ($recipients -join ',') -Result 'Success' -Kind 'diag'
+            Write-PodeJsonResponse -Value $r
+        } catch {
+            Write-Audit -Actor $s.username -Action 'Diagnostics report run (manual)' -Target ($recipients -join ',') -Result 'Error' -Kind 'diag' -Detail $_.Exception.Message
+            Set-PodeResponseStatus -Code 400; Write-PodeJsonResponse -Value @{ ok=$false; error=$_.Exception.Message }
+        }
     }
 
     # ---------- REMOTE EVENT VIEWER ----------
