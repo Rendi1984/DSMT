@@ -63,7 +63,7 @@ function Test-SetupComplete {
 
 # ---- Import modules ----
 Import-Module Pode
-foreach ($m in 'Db','Auth','Directory','Sync','Contractor','CertAuthority','Secrets','Diagnostics') {
+foreach ($m in 'Db','Auth','Directory','Sync','Contractor','CertAuthority','Secrets','Diagnostics','VMware') {
     Import-Module (Join-Path $here "modules/$m.psm1") -Force
 }
 
@@ -829,6 +829,85 @@ WHEN NOT MATCHED THEN INSERT(Username,ConsoleRole,PwHash,PwSalt,Iterations,Enabl
             Write-Audit -Actor $s.username -Action 'Diagnostics report run (manual)' -Target ($recipients -join ',') -Result 'Error' -Kind 'diag' -Detail $_.Exception.Message
             Set-PodeResponseStatus -Code 400; Write-PodeJsonResponse -Value @{ ok=$false; error=$_.Exception.Message }
         }
+    }
+
+    # ---------- VCENTER / ESXI ----------
+    Add-PodeRoute -Method Get -Path '/api/vcenter/connections' -ScriptBlock {
+        if (-not (Get-Session $WebEvent)) { Write-401; return }
+        $rows = @(Get-VCenterConnections | ForEach-Object {
+            @{ id=[int]$_['Id']; server=[string]$_['Server']; username=[string]$_['Username']; enabled=[bool]$_['Enabled']; allowUntrustedCert=[bool]$_['AllowUntrustedCert']
+               lastSyncAt=$(if($_['LastSyncAt']){"$($_['LastSyncAt'])"}else{$null}); lastResult=[string]$_['LastResult']; lastDetail=[string]$_['LastDetail'] }
+        })
+        Write-PodeJsonResponse -Value @{ connections = $rows; powerCliInstalled = (Test-PowerCli) }
+    }
+    Add-PodeRoute -Method Post -Path '/api/vcenter/connections' -ScriptBlock {
+        $s = Get-Session $WebEvent; if (-not $s) { Write-401; return }
+        $d = $WebEvent.Data
+        if ([string]::IsNullOrWhiteSpace($d.server) -or [string]::IsNullOrWhiteSpace($d.username) -or [string]::IsNullOrWhiteSpace($d.password)) {
+            Set-PodeResponseStatus -Code 400; Write-PodeJsonResponse -Value @{ ok=$false; error='server, username and password are all required.' }; return
+        }
+        try {
+            $id = Add-VCenterConnection -Server $d.server -Username $d.username -Password $d.password -AllowUntrustedCert:([bool]$d.allowUntrustedCert)
+            Write-Audit -Actor $s.username -Action 'vCenter connection saved' -Target $d.server -Result 'Success' -Kind 'vcenter'
+            Write-PodeJsonResponse -Value @{ ok=$true; id=$id }
+        } catch {
+            Set-PodeResponseStatus -Code 400; Write-PodeJsonResponse -Value @{ ok=$false; error=$_.Exception.Message }
+        }
+    }
+    Add-PodeRoute -Method Delete -Path '/api/vcenter/connections/:id' -ScriptBlock {
+        $s = Get-Session $WebEvent; if (-not $s) { Write-401; return }
+        $id = [int]$WebEvent.Parameters['id']
+        try {
+            Remove-VCenterConnection -Id $id
+            Write-Audit -Actor $s.username -Action 'vCenter connection removed' -Target "$id" -Result 'Success' -Kind 'vcenter'
+            Write-PodeJsonResponse -Value @{ ok=$true }
+        } catch { Set-PodeResponseStatus -Code 400; Write-PodeJsonResponse -Value @{ ok=$false; error=$_.Exception.Message } }
+    }
+    Add-PodeRoute -Method Post -Path '/api/vcenter/connections/:id/toggle' -ScriptBlock {
+        $s = Get-Session $WebEvent; if (-not $s) { Write-401; return }
+        $id = [int]$WebEvent.Parameters['id']; $en = [bool]$WebEvent.Data.enabled
+        try {
+            Set-VCenterConnectionEnabled -Id $id -Enabled $en
+            Write-Audit -Actor $s.username -Action $(if($en){'vCenter connection enabled'}else{'vCenter connection disabled'}) -Target "$id" -Result 'Success' -Kind 'vcenter'
+            Write-PodeJsonResponse -Value @{ ok=$true }
+        } catch { Set-PodeResponseStatus -Code 400; Write-PodeJsonResponse -Value @{ ok=$false; error=$_.Exception.Message } }
+    }
+    # Pulls fresh permissions from vCenter/ESXi right now and stores a new
+    # timestamped snapshot - can take a while (PowerCLI connect + full
+    # permission enumeration), so failures need a specific, readable reason
+    # (bad credentials vs. unreachable host vs. PowerCLI missing), not a
+    # generic 500 - the console shows $_.Exception.Message directly.
+    Add-PodeRoute -Method Post -Path '/api/vcenter/connections/:id/sync' -ScriptBlock {
+        $s = Get-Session $WebEvent; if (-not $s) { Write-401; return }
+        $id = [int]$WebEvent.Parameters['id']
+        try {
+            $r = Sync-VCenterConnection -ConnectionId $id
+            Write-Audit -Actor $s.username -Action 'vCenter sync' -Target "$id" -Result 'Success' -Kind 'vcenter' -Detail "$($r.count) entries"
+            Write-PodeJsonResponse -Value @{ ok=$true; count=$r.count; syncId="$($r.syncId)" }
+        } catch {
+            Write-Audit -Actor $s.username -Action 'vCenter sync' -Target "$id" -Result 'Error' -Kind 'vcenter' -Detail $_.Exception.Message
+            Set-PodeResponseStatus -Code 400; Write-PodeJsonResponse -Value @{ ok=$false; error=$_.Exception.Message }
+        }
+    }
+    Add-PodeRoute -Method Get -Path '/api/vcenter/connections/:id/permissions' -ScriptBlock {
+        if (-not (Get-Session $WebEvent)) { Write-401; return }
+        $id = [int]$WebEvent.Parameters['id']
+        try {
+            $rows = @(Get-VCenterLatestPermissions -ConnectionId $id | ForEach-Object {
+                @{ principal=[string]$_['Principal']; role=[string]$_['Role']; entity=[string]$_['Entity']; entityType=[string]$_['EntityType']; propagate=[bool]$_['Propagate']; isGroup=[bool]$_['IsGroup']; capturedAt="$($_['CapturedAt'])" }
+            })
+            Write-PodeJsonResponse -Value @{ permissions = $rows }
+        } catch { Set-PodeResponseStatus -Code 400; Write-PodeJsonResponse -Value @{ ok=$false; error=$_.Exception.Message } }
+    }
+    Add-PodeRoute -Method Get -Path '/api/vcenter/connections/:id/history' -ScriptBlock {
+        if (-not (Get-Session $WebEvent)) { Write-401; return }
+        $id = [int]$WebEvent.Parameters['id']
+        try {
+            $rows = @(Get-VCenterSyncHistory -ConnectionId $id | ForEach-Object {
+                @{ syncId="$($_['SyncId'])"; syncedAt="$($_['SyncedAt'])"; entryCount=[int]$_['EntryCount'] }
+            })
+            Write-PodeJsonResponse -Value @{ history = $rows }
+        } catch { Set-PodeResponseStatus -Code 400; Write-PodeJsonResponse -Value @{ ok=$false; error=$_.Exception.Message } }
     }
 
     # ---------- REMOTE EVENT VIEWER ----------

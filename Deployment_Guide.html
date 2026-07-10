@@ -381,6 +381,7 @@
             <tr><td>Certificate Authority</td><td><strong>Issue and Manage Certificates</strong> (AD CS Security tab)</td><td>Certificate Authority page</td></tr>
             <tr><td>Diagnostics / Event Viewer targets</td><td>Member of local <strong>Event Log Readers</strong> (event log) and local Administrators or explicit SCM query rights (service status) on each target</td><td>Diagnostics, Event Viewer</td></tr>
             <tr><td>SMTP relay</td><td>Send-as / relay permission for the From address used in test messages</td><td>Diagnostics test message (real send, not Simulate)</td></tr>
+            <tr><td>vCenter / ESXi</td><td>A vSphere account with at least read-only + "View" permission privileges on the entities you want visibility into; VMware PowerCLI (<code>Install-Module VMware.PowerCLI -Scope AllUsers -Force</code>) installed on the API server</td><td>vCenter / ESXi tab</td></tr>
           </tbody>
         </table>
       </div>
@@ -511,7 +512,6 @@ notepad config.json</pre><p>Set <strong>Database</strong>, <strong>Directory</st
             <tr><td><code>Api.ListenAddress</code></td><td>Interface the API binds to</td><td><code>0.0.0.0</code></td></tr>
             <tr><td><code>Api.Port</code></td><td>API port</td><td><code>8780</code></td></tr>
             <tr><td><code>Api.Protocol</code></td><td><code>http</code> or <code>https</code></td><td><code>http</code></td></tr>
-            <tr><td><code>Api.CorsOrigins</code></td><td>Console URL(s) allowed to call the API</td><td><code>["*"]</code></td></tr>
             <tr><td><code>Api.TokenTtlHours</code></td><td>Session token lifetime</td><td><code>8</code></td></tr>
             <tr><td><code>Database.Server</code> / <code>Port</code> / <code>Name</code></td><td>SQL Server connection target</td><td>blank → SETUP MODE</td></tr>
             <tr><td><code>Database.Auth</code></td><td><code>Windows</code> or <code>SQL</code></td><td><code>Windows</code></td></tr>
@@ -587,7 +587,7 @@ notepad config.json</pre><p>Set <strong>Database</strong>, <strong>Directory</st
         <li><h4>Use the real hostname or IP everywhere</h4><p>Browser address bar: <code>http://app01.lab.local:8080</code>. Settings → Connection → API base URL: <code>http://app01.lab.local:8780</code>.</p></li>
         <li><h4>Confirm the firewall scope</h4><p><code>Install-DSMT.ps1</code> already opens inbound rules for both ports (<code>DSMT Console &lt;port&gt;</code>, <code>DSMT API &lt;port&gt;</code>) via <code>New-NetFirewallRule</code> — confirm the rule allows the client's subnet, not just local traffic.</p></li>
         <li><h4>Confirm DNS resolves from the client</h4><p>The client machine must be able to resolve the server's hostname. If internal DNS is inconsistent (the same class of issue as the <code>sql01</code> vs. <code>sql01.lab.local</code> note under Prerequisites), use the IP address instead, or fix the client's DNS suffix search list.</p></li>
-        <li><h4>CORS won't block it</h4><p><code>Api.CorsOrigins</code> defaults to <code>["*"]</code> in <code>config.json</code>, so a remote browser is not blocked out of the box. Restrict it to the exact console URL once remote access is confirmed working (see the Security checklist in <code>README.md</code>).</p></li>
+        <li><h4>CORS won't block it</h4><p>The API always answers with <code>Access-Control-Allow-Origin: *</code> - there is no per-install allow-list to configure, so a remote browser is never blocked by CORS. Lock down access with Windows Authentication / network placement instead (see the Security checklist in <code>README.md</code>).</p></li>
       </ol>
 
       <p>A simpler alternative that avoids the <code>localhost</code> mistake entirely for every user, local or remote: see <a href="#reverse-proxy">Single-origin via IIS reverse proxy</a> below — one URL, no separate API field to configure.</p>
@@ -775,6 +775,14 @@ notepad config.json</pre><p>Set <strong>Database</strong>, <strong>Directory</st
         <p>General (LDAP server, Base DN, contractor OUs, sign-in domains), Connection (Demo/Live, API URL), Database, Certificate Authority, Access, and a config export/import (real JSON download / file-picker restore). The General tab's LDAP server/Base DN fields have their own <strong>“Test connection”</strong> button (added 3.31.0) — it checks whatever is currently typed in the form (not what's saved yet), so a typo can be caught before you hit Save.</p>
         <div class="feature-meta"><code>POST /api/config</code><code>POST /api/directory/test</code></div>
       </div>
+
+      <div class="feature" id="f-vcenter">
+        <div class="feature-head"><h3>vCenter / ESXi</h3></div>
+        <p><strong>Added in 3.35.0.</strong> System Team &rarr; "vCenter / ESXi". Add one or more vCenter/ESXi connections, then "Sync now" to pull every user/group &rarr; role permission assignment and store a timestamped snapshot - later syncs never overwrite earlier ones, so past pulls stay queryable (a history list, not just "current state") without hitting vCenter again. Uses VMware PowerCLI (<code>Connect-VIServer</code>/<code>Get-VIPermission</code>) rather than a hand-rolled API client, since that's the module VMware itself publishes and supports.</p>
+        <h4>To configure</h4>
+        <p>Install PowerCLI on the API server first: <code>Install-Module VMware.PowerCLI -Scope AllUsers -Force</code> (as Administrator). The console tells you directly if it's missing rather than failing with a generic error. TLS certificate validation is on by default for every connection; only turn on "Allow self-signed / untrusted certificate" for a connection with a genuinely self-signed cert (e.g. a lab vCenter) - it's a per-connection, explicit opt-in, never a blanket setting.</p>
+        <div class="feature-meta"><code>GET/POST/DELETE /api/vcenter/connections</code><code>POST /api/vcenter/connections/:id/sync</code><code>GET /api/vcenter/connections/:id/permissions</code><code>GET /api/vcenter/connections/:id/history</code></div>
+      </div>
     </section>
 
     <hr class="rule">
@@ -789,7 +797,7 @@ notepad config.json</pre><p>Set <strong>Database</strong>, <strong>Directory</st
             <tr><td><code>/api/db/info</code> or any call returns 500</td><td>SQL Server unreachable while using SQL-login auth</td><td>Fixed in 3.22.7 — verify SQL creds in Data Source, check <code>logs\dsmt-sql.log</code></td></tr>
             <tr><td>DC / Exchange check shows “unreachable” but the server is fine</td><td>ICMP (ping) blocked on the network</td><td>Fixed in 3.29.1 — ping is a hint only, the service query still runs</td></tr>
             <tr><td>Service won't start after a manual copy</td><td>Files not deployed to a permanent location, or a stale service registration</td><td>Re-run the installer (idempotent) rather than copying files by hand</td></tr>
-            <tr><td>Console shows CORS errors in Live mode</td><td><code>Api.CorsOrigins</code> doesn't include the console's URL</td><td>Set it to the exact console origin in <code>config.json</code>, restart the service</td></tr>
+            <tr><td>Console shows a CORS-looking error in Live mode</td><td>Almost always a failed request (wrong API URL, unreachable host, service down) that the browser reports as a CORS failure - the API itself always answers <code>Access-Control-Allow-Origin: *</code></td><td>Check the API base URL and that the service is actually reachable (Test connection), not CORS config - there isn't any to fix</td></tr>
             <tr><td>“Login failed for user 'DOMAIN\HOST$'”</td><td>The service's runtime identity (not the installer's) lacks SQL rights</td><td>Grant <code>db_datareader</code>/<code>db_datawriter</code> to that identity on <code>DSMTOOL</code></td></tr>
             <tr><td>Event Viewer / Diagnostics: Access Denied on a target</td><td>Service account missing local rights on that specific server</td><td>Add it to Event Log Readers / local Administrators there — see <a href="#permissions">Permissions</a></td></tr>
             <tr><td>Access Control: a domain user with valid credentials gets "Not a member of any group mapped for console access"</td><td>None of their LDAP groups appear in the Sign-in groups &amp; roles list (3.32.0+) - being mapped there is the only way in, there's no separate access toggle or Read-only fallback anymore</td><td>Add a mapping for one of their groups — see <a href="#f-access">Access Control</a></td></tr>
@@ -883,7 +891,7 @@ notepad config.json</pre><p>Set <strong>Database</strong>, <strong>Directory</st
 
     <div class="callout note" style="margin-top:60px;">
       <div class="dot"></div>
-      <p><strong>Version</strong> This guide describes DSMT 3.34.0 (index-new.html preview) / 3.32.3 (shipped index.html console). See <code>CHANGELOG.md</code> for the full release history.</p>
+      <p><strong>Version</strong> This guide describes DSMT 3.35.0 (index-new.html preview) / 3.32.3 (shipped index.html console). See <code>CHANGELOG.md</code> for the full release history.</p>
     </div>
   </main>
 </div>
