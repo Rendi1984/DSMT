@@ -92,8 +92,35 @@ function Get-Session {
     }
     if (-not $rows -or $rows.Count -eq 0) { return $null }
     if ([datetime]$rows[0]['ExpiresAt'] -lt (Get-Date).ToUniversalTime()) { return $null }
-    return [pscustomobject]@{ token=$token; username=$rows[0]['Username']; role=$rows[0]['ConsoleRole']; isLocal=[bool]$rows[0]['IsLocal'] }
+    $role = $rows[0]['ConsoleRole']
+    return [pscustomobject]@{
+        token=$token; username=$rows[0]['Username']; role=$role; isLocal=[bool]$rows[0]['IsLocal']
+        scope=(Get-RoleScope $role); readOnly=(Test-RoleReadOnly $role)
+    }
 }
+
+# ---------- RBAC: routes a Hafala-Tools-scoped session may reach ----------
+# Everyone signed in reaches auth/health/alerts regardless of scope (the app
+# shell itself needs them to function). Beyond that, a 'hafala' scope is
+# restricted to exactly the API surface behind the Hafala Tools workspace
+# (Azure Cloud Sync, DL Groups, Contractor Info) - enforced here, not just
+# hidden in the console, since hiding a workspace is a UX convenience, not
+# a security boundary.
+$script:HafalaAllowedPrefixes = @('/api/auth/', '/api/health', '/api/alerts', '/api/sync', '/api/dl/', '/api/contractor/')
+function Test-HafalaScopeAllowed {
+    param([string] $Path)
+    foreach ($p in $script:HafalaAllowedPrefixes) { if ($Path.StartsWith($p)) { return $true } }
+    return $false
+}
+
+# Routes that are semantically reads/probes even though they're POST (login,
+# the setup wizard's pre-auth steps, and "test the values in this form"
+# probes that don't persist anything) - exempt from the read-only guard.
+$script:WriteGuardExempt = @(
+    '/api/auth/login', '/api/auth/logout', '/api/auth/sso',
+    '/api/setup/test-server', '/api/setup/databases', '/api/setup/create-db', '/api/setup/save',
+    '/api/db/test', '/api/db/list', '/api/directory/test', '/api/secrets/test', '/api/ca/ping'
+)
 
 Start-PodeServer -Threads 8 {
     # -Threads 8: without this Pode defaults to a single request-processing
@@ -125,6 +152,43 @@ Start-PodeServer -Threads 8 {
         return $true
     }
     Add-PodeRoute -Method Options -Path '*' -ScriptBlock { Set-PodeResponseStatus -Code 204 }
+
+    # ---------- RBAC middleware ----------
+    # Runs before every route. Two independent checks, both enforced here
+    # (not just in the console) since hiding a button is UX, not security:
+    #   1. Read-only roles (Read-only, Hafala Tools Read-only) get a 403 with
+    #      a specific, actionable message on any write (POST/DELETE), except
+    #      the handful of pre-auth/probe routes in $WriteGuardExempt.
+    #   2. Hafala-scoped roles (Hafala Tools Operator/Read-only) get a 403 on
+    #      any route outside $HafalaAllowedPrefixes, GET or POST alike - a
+    #      Hafala-scoped session genuinely cannot reach Settings/System Team
+    #      data, not merely have it hidden in the UI.
+    # Both checks are skipped for anonymous/pre-auth requests (no session)
+    # since Get-Session/Write-401 in each route already gates those.
+    Add-PodeMiddleware -Name 'RBAC' -ScriptBlock {
+        $path = $WebEvent.Path
+        $auth = $WebEvent.Request.Headers['Authorization']
+        if (-not $auth -or $auth -notlike 'Bearer *') { return $true }
+        $s = Get-Session $WebEvent
+        if (-not $s) { return $true }
+        if ($s.scope -eq 'hafala' -and -not (Test-HafalaScopeAllowed -Path $path)) {
+            Set-PodeHeader -Name 'Access-Control-Allow-Origin'  -Value '*'
+            Set-PodeHeader -Name 'Access-Control-Allow-Headers' -Value 'Content-Type, Authorization'
+            Set-PodeHeader -Name 'Access-Control-Allow-Methods' -Value 'GET, POST, DELETE, OPTIONS'
+            Set-PodeResponseStatus -Code 403
+            Write-PodeJsonResponse -Value @{ error = 'Your role is scoped to Hafala Tools only - this page/action is not available to you.' }
+            return $false
+        }
+        if ($WebEvent.Method -in @('Post', 'Delete') -and $s.readOnly -and ($script:WriteGuardExempt -notcontains $path)) {
+            Set-PodeHeader -Name 'Access-Control-Allow-Origin'  -Value '*'
+            Set-PodeHeader -Name 'Access-Control-Allow-Headers' -Value 'Content-Type, Authorization'
+            Set-PodeHeader -Name 'Access-Control-Allow-Methods' -Value 'GET, POST, DELETE, OPTIONS'
+            Set-PodeResponseStatus -Code 403
+            Write-PodeJsonResponse -Value @{ error = 'Your role is read-only - you do not have permission to make changes. Contact an administrator to request write access.' }
+            return $false
+        }
+        return $true
+    }
 
     # Friendly response for anyone browsing straight to the API's own URL
     # (no /api/... path) - this API has no home page, but a raw 405 "Method
@@ -262,7 +326,7 @@ WHEN NOT MATCHED THEN INSERT(Username,ConsoleRole,PwHash,PwSalt,Iterations,Enabl
         Write-Audit -Actor $r.Username -Action 'Console sign-in' -Target 'console' -Result 'Success' -Kind 'auth' -SourceIp $ip
         # Flag well-known default credentials so the console can nag until they are changed.
         $defPw = ([bool]$r.IsLocal -and ($b.password -eq 'admin' -or $b.password -eq $b.username))
-        Write-PodeJsonResponse -Value @{ token=$token; displayName=$r.Username; role=$r.Role; isLocal=$r.IsLocal; defaultPassword=$defPw }
+        Write-PodeJsonResponse -Value @{ token=$token; displayName=$r.Username; role=$r.Role; isLocal=$r.IsLocal; defaultPassword=$defPw; scope=(Get-RoleScope $r.Role); readOnly=(Test-RoleReadOnly $r.Role) }
     }
 
     Add-PodeRoute -Method Post -Path '/api/auth/logout' -ScriptBlock {
@@ -335,7 +399,7 @@ WHEN NOT MATCHED THEN INSERT(Username,ConsoleRole,PwHash,PwSalt,Iterations,Enabl
         Invoke-Sql 'INSERT INTO dbo.Sessions(Token,Username,ConsoleRole,IsLocal,ExpiresAt) VALUES(@t,@u,@r,0,DATEADD(hour,@h,SYSUTCDATETIME()))' `
             @{ t=$token; u=$sam; r=$role; h=$ttl } -NonQuery | Out-Null
         Write-Audit -Actor $sam -Action 'SSO sign-in' -Target 'console' -Result 'Success' -Kind 'auth' -SourceIp $ip
-        Write-PodeJsonResponse -Value @{ ok=$true; token=$token; displayName=$sam; role=$role; isLocal=$false }
+        Write-PodeJsonResponse -Value @{ ok=$true; token=$token; displayName=$sam; role=$role; isLocal=$false; scope=(Get-RoleScope $role); readOnly=(Test-RoleReadOnly $role) }
     }
 
     # ---------- HEALTH ----------

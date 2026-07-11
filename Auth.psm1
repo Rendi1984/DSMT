@@ -159,20 +159,64 @@ function Get-UserGroups {
     return $groups
 }
 
+# ---------- Role -> (scope, access level) metadata ----------
+# Two independent axes per role: which workspaces it can reach (scope) and
+# whether it can make any change at all (level). Both are enforced server-side
+# (DSMT_Api.ps1's ReadOnlyGuard/ScopeGuard middleware) - the console also
+# hides what a role can't reach, but that's a UX convenience, not the
+# security boundary. A role missing from this table defaults to full/all
+# (fail-open only for a genuinely unrecognized role string, e.g. one typed
+# directly into dbo.RoleMappings/dbo.LocalAccounts by hand outside the UI -
+# every role the UI itself can assign is listed here).
+$script:RoleMeta = @{
+    'System Administrator'   = @{ scope = 'all';    level = 'full';     rank = 5 }
+    'Operator'                = @{ scope = 'all';    level = 'full';     rank = 4 }
+    'Helpdesk Operator'       = @{ scope = 'all';    level = 'full';     rank = 3 }
+    'Hafala Tools Operator'   = @{ scope = 'hafala'; level = 'full';     rank = 2 }
+    'Read-only'               = @{ scope = 'all';    level = 'readonly'; rank = 1 }
+    'Hafala Tools Read-only'  = @{ scope = 'hafala'; level = 'readonly'; rank = 0 }
+}
+
+function Get-RoleScope {
+    param([string] $Role)
+    if ($script:RoleMeta.ContainsKey($Role)) { return $script:RoleMeta[$Role].scope }
+    return 'all'
+}
+
+function Get-RoleLevel {
+    param([string] $Role)
+    if ($script:RoleMeta.ContainsKey($Role)) { return $script:RoleMeta[$Role].level }
+    return 'full'
+}
+
+function Test-RoleReadOnly {
+    param([string] $Role)
+    return (Get-RoleLevel -Role $Role) -eq 'readonly'
+}
+
+function Get-ConsoleRoleNames {
+    <# All assignable role names, for the console's role-mapping picker. #>
+    return @($script:RoleMeta.Keys)
+}
+
 function Resolve-ConsoleRole {
     <# Maps the user's groups to a console role using dbo.RoleMappings.
        A user not in ANY mapped group resolves to $null - Invoke-SignIn denies
        that outright. There is no separate access-group gate and no 'No access'
        role: being listed here (in some group) IS the access grant, and the
-       mapped role IS the permission level - one list controls both. #>
+       mapped role IS the permission level - one list controls both. When a
+       user is in multiple mapped groups, the highest-ranked role wins (a
+       Hafala-scoped role never silently downgrades a broader one, and vice
+       versa - highest rank always wins regardless of scope). #>
     param([string[]] $Groups)
     $maps = Get-RoleMappings
     $best = $null
-    $rank = @{ 'System Administrator' = 4; 'Operator' = 3; 'Helpdesk Operator' = 2; 'Read-only' = 1 }
     foreach ($m in $maps) {
         if ($Groups -contains $m['LdapGroup']) {
             $role = $m['ConsoleRole']
-            if (-not $best -or ($rank[$role] -gt $rank[$best])) { $best = $role }
+            $rank = if ($script:RoleMeta.ContainsKey($role)) { $script:RoleMeta[$role].rank } else { 0 }
+            $bestRank = if ($best -and $script:RoleMeta.ContainsKey($best)) { $script:RoleMeta[$best].rank } else { -1 }
+            if (-not $best -or $rank -gt $bestRank) { $best = $role }
         }
     }
     return $best
@@ -214,4 +258,5 @@ function Invoke-SignIn {
 
 Export-ModuleMember -Function New-PasswordHash, Test-PasswordHash, Test-LocalAccount,
     Test-LdapCredential, Get-UserGroups, Resolve-ConsoleRole, Invoke-SignIn,
-    New-TotpSecret, Get-TotpCode, Test-TotpCode, Get-TotpUri, ConvertTo-Base32, ConvertFrom-Base32
+    New-TotpSecret, Get-TotpCode, Test-TotpCode, Get-TotpUri, ConvertTo-Base32, ConvertFrom-Base32,
+    Get-RoleScope, Get-RoleLevel, Test-RoleReadOnly, Get-ConsoleRoleNames
