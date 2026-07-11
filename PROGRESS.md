@@ -7,10 +7,81 @@ useful context under "Notes" so a fresh session (with no chat history) can
 pick up immediately.
 
 ## Current version
-3.36.0 (index-new.html preview) / 3.32.3 (shipped index.html console) — see
+3.37.0 (index-new.html preview) / 3.32.3 (shipped index.html console) — see
 `CHANGELOG.md` for the authoritative log.
 
 ## Open tasks
+- **Real, server-enforced RBAC: scoped + read-only roles (this session)**:
+  user asked to (1) allow giving permissions scoped to only Hafala Tools
+  (so that role only sees those tools), (2) an "see everything" option
+  (already covered by the existing all-scope roles), (3) read-only variants
+  including a Hafala-scoped read-only and a "read-only administrator"
+  (sees everything, can't change anything - already what plain `Read-only`
+  meant, now made explicit), and (4) a clear message when a read-only user
+  tries to change something. Delivered all four, `index.html` untouched:
+  - **Two new roles**: `Hafala Tools Operator` (scope=hafala, level=full)
+    and `Hafala Tools Read-only` (scope=hafala, level=readonly), added
+    to `Auth.psm1`'s new `$script:RoleMeta` table alongside the existing
+    four (`System Administrator`/`Operator`/`Helpdesk Operator` all
+    scope=all+level=full; `Read-only` scope=all+level=readonly - this is
+    the "read-only administrator" the user described, it already existed
+    under a plainer name). `Resolve-ConsoleRole`'s highest-rank-wins logic
+    (used when a user belongs to multiple mapped groups) was preserved,
+    now driven by each role's `rank` in the same metadata table instead of
+    a separate hardcoded hashtable.
+  - **Enforced server-side, not just hidden in the console — this was the
+    critical design decision**: before this session, `DSMT_Api.ps1` had
+    **zero role enforcement anywhere** - every write route only checked
+    "does a valid session exist," never "is this role allowed to do this."
+    Confirmed by grepping every route for role checks - none existed. Added
+    a single Pode middleware (`RBAC`, runs before every route via
+    `Add-PodeMiddleware`) that: (a) rejects any request outside
+    `$script:HafalaAllowedPrefixes` (`/api/sync`, `/api/dl/`,
+    `/api/contractor/`, plus the universal `/api/auth/`, `/api/health`,
+    `/api/alerts` every session needs) for scope=hafala sessions with a 403
+    and a specific message; (b) rejects any POST/DELETE (except a short
+    exempt list of pre-auth/probe routes: login, setup wizard steps,
+    `/api/db/test`, etc.) for level=readonly sessions with a 403 and the
+    message *"Your role is read-only - you do not have permission to make
+    changes. Contact an administrator to request write access."* This means
+    the restriction holds even against a direct API call that bypasses the
+    console entirely - the console's UI hiding is a convenience on top of a
+    real boundary, not the boundary itself.
+  - **Console reflects it**: `/api/auth/login` and `/api/auth/sso` responses
+    now carry `scope`/`readOnly` (computed via new `Get-RoleScope`/
+    `Test-RoleReadOnly` exported from `Auth.psm1`). The workspace switcher
+    filters out Settings/System Team for scope=hafala sessions and forces
+    the workspace to `hafala` on sign-in. The `ROLES` list used by every
+    role-mapping `<select>` in the console now includes the 2 new roles.
+    `apiFetch`'s existing 403 handler (from 3.35.0) was fixed to surface
+    the **server's actual error message** instead of a hardcoded generic
+    one - this one change means every write action across the entire app
+    automatically shows the read-only/scope-block message as a toast the
+    moment it's attempted, with no per-button wiring needed.
+  - Verified end-to-end against the scratch mock API server (not committed
+    - same one built in 3.36.0), extended with 3 additional test sessions
+    (`hafala-user`, `hafala-ro-user`, `readonly-user`) and a middleware
+    implementation mirroring the real one. Confirmed via Playwright: a
+    Hafala Tools Operator session's workspace switcher shows only Hafala
+    Tools (Settings/System Team absent); a Hafala Tools Read-only session
+    is scoped the same way; a Read-only session sees every workspace but
+    attempting to add a role mapping shows "Add failed: Your role is
+    read-only - you do not have permission to make changes. Contact an
+    administrator to request write access." rendered directly from the
+    (mock) server's response. Full regression across all sub-tabs of all 3
+    workspaces also passed with zero errors, confirming the RBAC changes
+    didn't break the System Administrator/full-access path everything
+    else in this project has been tested against.
+  - Version bumped to 3.37.0 (index-new.html's single About-modal string).
+  - **Caveat for next session**: same pattern as always - lives in
+    `index-new.html` only. The middleware logic itself (Pode
+    `Add-PodeMiddleware`, `Get-Session` role lookups) could not be executed
+    against a real Pode server in this sandbox (no `pwsh`) - verified by
+    ASCII/brace checks and mirroring the exact logic in the mock server for
+    behavioral testing, not by running the real PowerShell. Recommend a
+    quick smoke test after deploying: sign in as each of the 6 roles (or
+    map a test AD group to each) and confirm the workspace visibility and
+    write-blocking match what's described above.
 - **Setup wizard ported + real end-to-end verification + installer
   de-dup (this session)**: user asked three things: (1) why doesn't the
   browser setup wizard exist in index-new.html when it's supposed to be a

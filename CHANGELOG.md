@@ -1,5 +1,13 @@
 # Changelog
 All notable changes to the Directory Services Management Tool.
+## 3.37.0 (index-new.html)
+Real, server-enforced role-based access control - scoped roles (Hafala Tools only) and read-only roles, both actually enforced by the API, not just hidden in the console - `index-new.html` only, `index.html` unchanged.
+
+- **Two new roles**: `Hafala Tools Operator` (full access, but only to the Hafala Tools workspace) and `Hafala Tools Read-only` (Hafala Tools only, no writes), alongside the existing `System Administrator`/`Operator`/`Helpdesk Operator`/`Read-only`. Every role now has two independent properties in `Auth.psm1`'s new `$script:RoleMeta` table: **scope** (`all` or `hafala`) and **level** (`full` or `readonly`).
+- **Server-enforced, not just UI-hidden**: a new Pode middleware in `DSMT_Api.ps1` runs before every route and rejects requests a role isn't allowed to make - a Hafala-scoped session gets a 403 on any route outside Sync/DL Groups/Contractor Info (even if someone bypassed the console and called the API directly), and a read-only session gets a 403 on any POST/DELETE with the message *"Your role is read-only - you do not have permission to make changes. Contact an administrator to request write access."* Confirmed prior to this change there was **no role enforcement at all** in the API - every write route only checked "is this session valid," never "is this role allowed to write" - so this closes a real, pre-existing gap, not just adding a new feature.
+- **Console reflects the same rules**: `/api/auth/login` and `/api/auth/sso` now return `scope`/`readOnly`; the workspace switcher hides Settings/System Team for Hafala-scoped sessions (forced onto the Hafala Tools workspace on sign-in); the two new roles appear in every role-mapping picker. Read-only users get the server's exact message as a toast the moment they attempt any write - via `apiFetch`'s existing 403 handling (built in 3.35.0), which now surfaces the server's specific error text instead of a generic one.
+- Verified end-to-end against the scratch mock API server (extended with role-aware sessions and the same middleware logic as the real API): a Hafala Tools Operator session sees only the Hafala Tools workspace; a Hafala Tools Read-only session sees only Hafala Tools AND is blocked from writes; a Read-only session sees everything but a real write attempt (adding a role mapping) is rejected with the exact server message rendered in the console. Zero page errors throughout.
+
 ## 3.36.0 (index-new.html)
 Browser setup wizard ported to index-new.html, real end-to-end Live-mode verification, and installer de-duplication - `index-new.html` only, `index.html` unchanged.
 
