@@ -175,16 +175,14 @@ Start-PodeServer -Threads 8 {
             Set-PodeHeader -Name 'Access-Control-Allow-Origin'  -Value '*'
             Set-PodeHeader -Name 'Access-Control-Allow-Headers' -Value 'Content-Type, Authorization'
             Set-PodeHeader -Name 'Access-Control-Allow-Methods' -Value 'GET, POST, DELETE, OPTIONS'
-            Set-PodeResponseStatus -Code 403
-            Write-PodeJsonResponse -Value @{ error = 'Your role is scoped to Hafala Tools only - this page/action is not available to you.' }
+                        Write-PodeJsonResponse -StatusCode 403 -Value @{ error = 'Your role is scoped to Hafala Tools only - this page/action is not available to you.' }
             return $false
         }
         if ($WebEvent.Method -in @('Post', 'Delete') -and $s.readOnly -and ($script:WriteGuardExempt -notcontains $path)) {
             Set-PodeHeader -Name 'Access-Control-Allow-Origin'  -Value '*'
             Set-PodeHeader -Name 'Access-Control-Allow-Headers' -Value 'Content-Type, Authorization'
             Set-PodeHeader -Name 'Access-Control-Allow-Methods' -Value 'GET, POST, DELETE, OPTIONS'
-            Set-PodeResponseStatus -Code 403
-            Write-PodeJsonResponse -Value @{ error = 'Your role is read-only - you do not have permission to make changes. Contact an administrator to request write access.' }
+                        Write-PodeJsonResponse -StatusCode 403 -Value @{ error = 'Your role is read-only - you do not have permission to make changes. Contact an administrator to request write access.' }
             return $false
         }
         return $true
@@ -211,8 +209,29 @@ Start-PodeServer -Threads 8 {
         Set-PodeHeader -Name 'Access-Control-Allow-Origin'  -Value '*'
         Set-PodeHeader -Name 'Access-Control-Allow-Headers' -Value 'Content-Type, Authorization'
         Set-PodeHeader -Name 'Access-Control-Allow-Methods' -Value 'GET, POST, DELETE, OPTIONS'
-        Set-PodeResponseStatus -Code 401
-        Write-PodeJsonResponse -Value @{ error = 'Unauthorized' }
+        Write-PodeJsonResponse -StatusCode 401 -Value @{ error = 'Unauthorized' }
+    }
+
+    # Uniform JSON error responder for route catch blocks. Two jobs:
+    #   1. Always answer with application/json carrying an 'error' field.
+    #      (Set-PodeResponseStatus -Code 4xx/5xx made Pode render its HTML
+    #      error page, which garbled/replaced the JSON body - the console
+    #      then showed 'no error detail returned - check the API server
+    #      logs'. Write-PodeJsonResponse -StatusCode never does that.)
+    #   2. Translate AD permission failures into an actionable message: they
+    #      mean the SERVICE ACCOUNT lacks delegated rights on the target OU,
+    #      not that the console user did something wrong.
+    function Write-ApiError {
+        param($Err, [int]$Code = 400)
+        $msg = $Err.Exception.Message
+        if ($msg -match 'Insufficient access rights|Access is denied|unwilling to perform') {
+            $Code = 403
+            $msg = "Active Directory refused the operation: $msg. The DSMT service account (the identity the DSMT-Api Windows service runs as) needs delegated rights on the target OU for this action - see 'Active Directory permissions' in the Deployment Guide."
+        }
+        Set-PodeHeader -Name 'Access-Control-Allow-Origin'  -Value '*'
+        Set-PodeHeader -Name 'Access-Control-Allow-Headers' -Value 'Content-Type, Authorization'
+        Set-PodeHeader -Name 'Access-Control-Allow-Methods' -Value 'GET, POST, DELETE, OPTIONS'
+        Write-PodeJsonResponse -StatusCode $Code -Value @{ ok = $false; error = $msg }
     }
 
     # ---------- FILE LOGGING ----------
@@ -231,7 +250,21 @@ Start-PodeServer -Threads 8 {
     # config.json. These routes write config.json and create/seed the database.
     Add-PodeRoute -Method Get -Path '/api/setup/status' -ScriptBlock {
         $cfg = $using:Config
-        Write-PodeJsonResponse -Value @{ setupComplete = (Test-SetupComplete -Cfg $cfg); database = @{ server = $cfg.Database.Server; name = $cfg.Database.Name } }
+        # Returns everything the wizard needs to PREFILL its forms when an
+        # installation already exists, so re-running setup shows the current
+        # values instead of blank defaults. No secrets are ever included.
+        $adminUser = $null
+        try {
+            $row = Invoke-Sql 'SELECT TOP 1 Username FROM dbo.LocalAccounts WHERE BuiltIn=1 ORDER BY Id'
+            if ($row -and $row.Count -gt 0) { $adminUser = [string]$row[0]['Username'] }
+        } catch {}
+        Write-PodeJsonResponse -Value @{
+            setupComplete = (Test-SetupComplete -Cfg $cfg)
+            database  = @{ engine = $cfg.Database.Engine; server = $cfg.Database.Server; port = $cfg.Database.Port; name = $cfg.Database.Name; auth = $cfg.Database.Auth; user = $cfg.Database.User; encrypt = [bool]$cfg.Database.Encrypt }
+            directory = @{ ldapServer = $cfg.Directory.LdapServer; baseDN = $cfg.Directory.BaseDN; domains = @($cfg.Directory.Domains) }
+            adminExists = (-not [string]::IsNullOrWhiteSpace($adminUser))
+            adminUser   = $adminUser
+        }
     }
     Add-PodeRoute -Method Post -Path '/api/setup/test-server' -ScriptBlock {
         Write-PodeJsonResponse -Value (Test-SqlServer -DbConfig $WebEvent.Data)
@@ -254,7 +287,7 @@ Start-PodeServer -Threads 8 {
         # so /api/setup/save never actually persisted anything or returned a
         # usable response, no matter how many times the wizard was retried.
         $cfg = $using:Config
-        if (Test-SetupComplete -Cfg $cfg) { Set-PodeResponseStatus -Code 409; Write-PodeJsonResponse -Value @{ error = 'Setup already complete.' }; return }
+        if (Test-SetupComplete -Cfg $cfg) { Write-PodeJsonResponse -StatusCode 409 -Value @{ error = 'Setup already complete.' }; return }
         $d = $WebEvent.Data
         $cfg.Database.Engine                 = $d.Engine
         $cfg.Database.Server                 = $d.Server
@@ -274,18 +307,26 @@ Start-PodeServer -Threads 8 {
         try { Initialize-Db -DbConfig $cfg.Database -ProbeOnly; Initialize-Db -DbConfig $cfg.Database }
         catch { Write-PodeJsonResponse -Value @{ ok = $false; error = $_.Exception.Message }; return }
         # Optional: seed the break-glass local administrator collected by the wizard.
+        $adminPreserved = $false
         if ($d.LocalAdmin -and $d.LocalAdmin.User -and $d.LocalAdmin.Password) {
             try {
-                $h = New-PasswordHash -Password ([string]$d.LocalAdmin.Password)
-                Invoke-Sql @'
-MERGE dbo.LocalAccounts AS t USING (SELECT @u AS Username) AS s ON t.Username=s.Username
-WHEN MATCHED THEN UPDATE SET PwHash=@h, PwSalt=@sa, Iterations=@i, Enabled=1
-WHEN NOT MATCHED THEN INSERT(Username,ConsoleRole,PwHash,PwSalt,Iterations,Enabled,BuiltIn)
-  VALUES(@u,'Local Administrator',@h,@sa,@i,1,1);
+                # NEVER overwrite an existing account's password from the
+                # (unauthenticated) setup flow - re-running setup against an
+                # existing database must not lock out accounts that already
+                # work. Password resets go through Install.ps1 -SeedLocalAdmin.
+                $exists = Invoke-Sql 'SELECT COUNT(*) FROM dbo.LocalAccounts WHERE Username=@u' @{ u=[string]$d.LocalAdmin.User } -Scalar
+                if ([int]$exists -gt 0) {
+                    $adminPreserved = $true
+                } else {
+                    $h = New-PasswordHash -Password ([string]$d.LocalAdmin.Password)
+                    Invoke-Sql @'
+INSERT INTO dbo.LocalAccounts(Username,ConsoleRole,PwHash,PwSalt,Iterations,Enabled,BuiltIn)
+VALUES(@u,'Local Administrator',@h,@sa,@i,1,1);
 '@ @{ u=[string]$d.LocalAdmin.User; h=$h.Hash; sa=$h.Salt; i=$h.Iterations } -NonQuery | Out-Null
+                }
             } catch { Write-PodeJsonResponse -Value @{ ok = $false; error = ('Database ready but seeding the local administrator failed: ' + $_.Exception.Message) }; return }
         }
-        Write-PodeJsonResponse -Value @{ ok = $true }
+        Write-PodeJsonResponse -Value @{ ok = $true; adminPreserved = $adminPreserved }
     }
 
     # ---------- AUTH ----------
@@ -302,7 +343,7 @@ WHEN NOT MATCHED THEN INSERT(Username,ConsoleRole,PwHash,PwSalt,Iterations,Enabl
             $r = Invoke-SignIn -Config $cfg -Domain $b.domain -Username $b.username -Password $b.password -MfaCode $b.mfaCode
         } catch {
             Write-Audit -Actor $b.username -Action 'Console sign-in' -Target 'console' -Result 'Error' -Kind 'auth' -Detail $_.Exception.Message -SourceIp $ip
-            Set-PodeResponseStatus -Code 502; Write-PodeJsonResponse -Value @{ error = 'Directory unreachable: ' + $_.Exception.Message }; return
+            Write-PodeJsonResponse -StatusCode 502 -Value @{ error = 'Directory unreachable: ' + $_.Exception.Message }; return
         }
         if (-not $r.Ok) {
             # MfaRequired (password already checked out) is a distinct outcome from a
@@ -310,10 +351,10 @@ WHEN NOT MATCHED THEN INSERT(Username,ConsoleRole,PwHash,PwSalt,Iterations,Enabl
             # error, but it must NOT create a session or count as success either way.
             if ($r.MfaRequired) {
                 Write-Audit -Actor $b.username -Action 'Console sign-in (MFA challenge)' -Target 'console' -Result 'Denied' -Kind 'auth' -Detail $r.Reason -SourceIp $ip
-                Set-PodeResponseStatus -Code 401; Write-PodeJsonResponse -Value @{ error = $r.Reason; mfaRequired = $true }; return
+                Write-PodeJsonResponse -StatusCode 401 -Value @{ error = $r.Reason; mfaRequired = $true }; return
             }
             Write-Audit -Actor $b.username -Action 'Console sign-in' -Target 'console' -Result 'Denied' -Kind 'auth' -Detail $r.Reason -SourceIp $ip
-            Set-PodeResponseStatus -Code 401; Write-PodeJsonResponse -Value @{ error = $r.Reason }; return
+            Write-PodeJsonResponse -StatusCode 401 -Value @{ error = $r.Reason }; return
         }
         $token = New-Token
         $ttl = [int]$cfg.Api.TokenTtlHours
@@ -321,7 +362,7 @@ WHEN NOT MATCHED THEN INSERT(Username,ConsoleRole,PwHash,PwSalt,Iterations,Enabl
             Invoke-Sql 'INSERT INTO dbo.Sessions(Token,Username,ConsoleRole,IsLocal,ExpiresAt) VALUES(@t,@u,@r,@l,DATEADD(hour,@h,SYSUTCDATETIME()))' `
                 @{ t=$token; u=$r.Username; r=$r.Role; l=([int][bool]$r.IsLocal); h=$ttl } -NonQuery | Out-Null
         } catch {
-            Set-PodeResponseStatus -Code 502; Write-PodeJsonResponse -Value @{ error = 'Database unreachable while creating the session: ' + $_.Exception.Message }; return
+            Write-PodeJsonResponse -StatusCode 502 -Value @{ error = 'Database unreachable while creating the session: ' + $_.Exception.Message }; return
         }
         Write-Audit -Actor $r.Username -Action 'Console sign-in' -Target 'console' -Result 'Success' -Kind 'auth' -SourceIp $ip
         # Flag well-known default credentials so the console can nag until they are changed.
@@ -343,7 +384,7 @@ WHEN NOT MATCHED THEN INSERT(Username,ConsoleRole,PwHash,PwSalt,Iterations,Enabl
     # never actually saved.
     Add-PodeRoute -Method Post -Path '/api/auth/mfa/setup' -ScriptBlock {
         $s = Get-Session $WebEvent; if (-not $s) { Write-401; return }
-        if (-not $s.isLocal) { Set-PodeResponseStatus -Code 400; Write-PodeJsonResponse -Value @{ ok=$false; error='MFA is only available for local accounts.' }; return }
+        if (-not $s.isLocal) { Write-PodeJsonResponse -StatusCode 400 -Value @{ ok=$false; error='MFA is only available for local accounts.' }; return }
         $secret = New-TotpSecret
         Invoke-Sql 'UPDATE dbo.LocalAccounts SET MfaSecret=@sec, MfaEnabled=0 WHERE Username=@u' @{ sec=$secret; u=$s.username } -NonQuery | Out-Null
         Write-Audit -Actor $s.username -Action 'MFA enrollment started' -Target $s.username -Result 'Success' -Kind 'auth'
@@ -353,10 +394,10 @@ WHEN NOT MATCHED THEN INSERT(Username,ConsoleRole,PwHash,PwSalt,Iterations,Enabl
         $s = Get-Session $WebEvent; if (-not $s) { Write-401; return }
         $row = Invoke-Sql 'SELECT TOP 1 MfaSecret FROM dbo.LocalAccounts WHERE Username=@u' @{ u=$s.username }
         $secret = if ($row -and $row.Count -gt 0) { [string]$row[0]['MfaSecret'] } else { $null }
-        if ([string]::IsNullOrWhiteSpace($secret)) { Set-PodeResponseStatus -Code 400; Write-PodeJsonResponse -Value @{ ok=$false; error='Call /api/auth/mfa/setup first.' }; return }
+        if ([string]::IsNullOrWhiteSpace($secret)) { Write-PodeJsonResponse -StatusCode 400 -Value @{ ok=$false; error='Call /api/auth/mfa/setup first.' }; return }
         if (-not (Test-TotpCode -Base32Secret $secret -Code $WebEvent.Data.code)) {
             Write-Audit -Actor $s.username -Action 'MFA enable' -Target $s.username -Result 'Denied' -Kind 'auth' -Detail 'Invalid code'
-            Set-PodeResponseStatus -Code 400; Write-PodeJsonResponse -Value @{ ok=$false; error='Invalid code.' }; return
+            Write-PodeJsonResponse -StatusCode 400 -Value @{ ok=$false; error='Invalid code.' }; return
         }
         Invoke-Sql 'UPDATE dbo.LocalAccounts SET MfaEnabled=1 WHERE Username=@u' @{ u=$s.username } -NonQuery | Out-Null
         Write-Audit -Actor $s.username -Action 'MFA enabled' -Target $s.username -Result 'Success' -Kind 'auth'
@@ -381,18 +422,18 @@ WHEN NOT MATCHED THEN INSERT(Username,ConsoleRole,PwHash,PwSalt,Iterations,Enabl
         $cfg = $using:Config
         $ip = $WebEvent.Request.RemoteEndPoint.Address.ToString()
         if (-not [bool]$cfg.Directory.SsoEnabled) {
-            Set-PodeResponseStatus -Code 400; Write-PodeJsonResponse -Value @{ ok=$false; error='SSO is not enabled.' }; return
+            Write-PodeJsonResponse -StatusCode 400 -Value @{ ok=$false; error='SSO is not enabled.' }; return
         }
         $winUser = $WebEvent.Request.Headers['X-Windows-User']
         if ([string]::IsNullOrWhiteSpace($winUser)) {
-            Set-PodeResponseStatus -Code 401; Write-PodeJsonResponse -Value @{ ok=$false; error='No Windows identity was forwarded by IIS - check Windows Authentication is enabled on the site.' }; return
+            Write-PodeJsonResponse -StatusCode 401 -Value @{ ok=$false; error='No Windows identity was forwarded by IIS - check Windows Authentication is enabled on the site.' }; return
         }
         $sam = ($winUser -replace '^.*\\', '')
         $groups = Get-UserGroups -Server $cfg.Directory.LdapServer -BaseDN $cfg.Directory.BaseDN -SamAccountName $sam
         $role = Resolve-ConsoleRole -Groups $groups
         if (-not $role) {
             Write-Audit -Actor $sam -Action 'SSO sign-in' -Target 'console' -Result 'Denied' -Kind 'auth' -Detail 'Not a member of any group mapped for console access' -SourceIp $ip
-            Set-PodeResponseStatus -Code 401; Write-PodeJsonResponse -Value @{ ok=$false; error='Not a member of any group mapped for console access' }; return
+            Write-PodeJsonResponse -StatusCode 401 -Value @{ ok=$false; error='Not a member of any group mapped for console access' }; return
         }
         $token = New-Token
         $ttl = [int]$cfg.Api.TokenTtlHours
@@ -451,7 +492,7 @@ WHEN NOT MATCHED THEN INSERT(Username,ConsoleRole,PwHash,PwSalt,Iterations,Enabl
     Add-PodeRoute -Method Post -Path '/api/db/list' -ScriptBlock {
         if (-not (Get-Session $WebEvent)) { Write-401; return }
         try { Write-PodeJsonResponse -Value @{ ok = $true; databases = @(Get-Databases -DbConfig $WebEvent.Data) } }
-        catch { Set-PodeResponseStatus -Code 400; Write-PodeJsonResponse -Value @{ ok = $false; error = $_.Exception.Message } }
+        catch { Write-ApiError $_ }
     }
     Add-PodeRoute -Method Post -Path '/api/db/create' -ScriptBlock {
         $s = Get-Session $WebEvent; if (-not $s) { Write-401; return }
@@ -464,7 +505,7 @@ WHEN NOT MATCHED THEN INSERT(Username,ConsoleRole,PwHash,PwSalt,Iterations,Enabl
     Add-PodeRoute -Method Get -Path '/api/db/info' -ScriptBlock {
         if (-not (Get-Session $WebEvent)) { Write-401; return }
         try { Write-PodeJsonResponse -Value (Get-DbInfo) }
-        catch { Set-PodeResponseStatus -Code 400; Write-PodeJsonResponse -Value @{ ok = $false; connected = $false; error = $_.Exception.Message } }
+        catch { Write-PodeJsonResponse -StatusCode 400 -Value @{ ok = $false; connected = $false; error = $_.Exception.Message } }
     }
     Add-PodeRoute -Method Post -Path '/api/db/migrate' -ScriptBlock {
         $s = Get-Session $WebEvent; if (-not $s) { Write-401; return }
@@ -473,7 +514,7 @@ WHEN NOT MATCHED THEN INSERT(Username,ConsoleRole,PwHash,PwSalt,Iterations,Enabl
             $r = Invoke-DbMigrate -SchemaPath $schema
             Write-Audit -Actor $s.username -Action 'Schema migrate' -Target 'database' -Result $(if($r.ok){'Success'}else{'Error'}) -Kind 'db'
             Write-PodeJsonResponse -Value $r
-        } catch { Set-PodeResponseStatus -Code 400; Write-PodeJsonResponse -Value @{ ok = $false; error = $_.Exception.Message } }
+        } catch { Write-ApiError $_ }
     }
     Add-PodeRoute -Method Post -Path '/api/db/backup' -ScriptBlock {
         $s = Get-Session $WebEvent; if (-not $s) { Write-401; return }
@@ -481,28 +522,31 @@ WHEN NOT MATCHED THEN INSERT(Username,ConsoleRole,PwHash,PwSalt,Iterations,Enabl
             $r = Invoke-DbBackup
             Write-Audit -Actor $s.username -Action 'Database backup' -Target $r.file -Result 'Success' -Kind 'db'
             Write-PodeJsonResponse -Value $r
-        } catch { Set-PodeResponseStatus -Code 400; Write-PodeJsonResponse -Value @{ ok = $false; error = $_.Exception.Message } }
+        } catch { Write-ApiError $_ }
     }
 
     # ---------- SYNC ----------
     Add-PodeRoute -Method Post -Path '/api/sync' -ScriptBlock {
         $s = Get-Session $WebEvent; if (-not $s) { Write-401; return }
         $cfg = $using:Config
-        $r = Start-DeltaSync -AdConnectServer $cfg.Sync.ADConnectServer
-        Write-Audit -Actor $s.username -Action 'Delta sync cycle' -Target $cfg.Sync.ADConnectServer -Result $(if($r.ok){'Success'}else{'Error'}) -Kind 'sync'
-        Write-PodeJsonResponse -Value @{ ok=$r.ok; log=$r.log }
+        try {
+            $r = Start-DeltaSync -AdConnectServer $cfg.Sync.ADConnectServer
+            Write-Audit -Actor $s.username -Action 'Delta sync cycle' -Target $cfg.Sync.ADConnectServer -Result $(if($r.ok){'Success'}else{'Error'}) -Kind 'sync'
+            Write-PodeJsonResponse -Value @{ ok=$r.ok; log=$r.log }
+        } catch { Write-ApiError $_ }
     }
     Add-PodeRoute -Method Get -Path '/api/sync/status' -ScriptBlock {
         if (-not (Get-Session $WebEvent)) { Write-401; return }
         $cfg = $using:Config
-        Write-PodeJsonResponse -Value (Get-SyncStatus -AdConnectServer $cfg.Sync.ADConnectServer)
+        try { Write-PodeJsonResponse -Value (Get-SyncStatus -AdConnectServer $cfg.Sync.ADConnectServer) }
+        catch { Write-ApiError $_ }
     }
 
     # ---------- DL GROUPS ----------
     Add-PodeRoute -Method Get -Path '/api/dl/:group' -ScriptBlock {
         if (-not (Get-Session $WebEvent)) { Write-401; return }
         try { Write-PodeJsonResponse -Value @{ members = @(Get-GroupMembers -GroupName $WebEvent.Parameters['group']) } }
-        catch { Set-PodeResponseStatus -Code 400; Write-PodeJsonResponse -Value @{ error=$_.Exception.Message } }
+        catch { Write-ApiError $_ }
     }
 
     # ---------- PASSWORD EXPIRY REPORT ----------
@@ -510,28 +554,39 @@ WHEN NOT MATCHED THEN INSERT(Username,ConsoleRole,PwHash,PwSalt,Iterations,Enabl
         if (-not (Get-Session $WebEvent)) { Write-401; return }
         $days = if ($WebEvent.Query['days']) { [int]$WebEvent.Query['days'] } else { 30 }
         try { Write-PodeJsonResponse -Value @{ users = @(Get-ExpiringPasswords -Days $days) } }
-        catch { Set-PodeResponseStatus -Code 400; Write-PodeJsonResponse -Value @{ error=$_.Exception.Message } }
+        catch { Write-ApiError $_ }
     }
 
     # ---------- USERS ----------
     Add-PodeRoute -Method Get -Path '/api/users' -ScriptBlock {
         if (-not (Get-Session $WebEvent)) { Write-401; return }
         $q = $WebEvent.Query['q']
-        Write-PodeJsonResponse -Value @{ users = @(Get-DirectoryUsers -Query $q) }
+        try { Write-PodeJsonResponse -Value @{ users = @(Get-DirectoryUsers -Query $q) } }
+        catch { Write-ApiError $_ }
     }
     Add-PodeRoute -Method Post -Path '/api/users/:sam/reset' -ScriptBlock {
         $s = Get-Session $WebEvent; if (-not $s) { Write-401; return }
         $sam = $WebEvent.Parameters['sam']; $pw = $WebEvent.Data.password
-        Reset-UserPassword -Sam $sam -NewPassword $pw -MustChange | Out-Null
-        Write-Audit -Actor $s.username -Action 'Password reset' -Target $sam -Result 'Success' -Kind 'pw'
-        Write-PodeJsonResponse -Value @{ ok=$true }
+        try {
+            Reset-UserPassword -Sam $sam -NewPassword $pw -MustChange | Out-Null
+            Write-Audit -Actor $s.username -Action 'Password reset' -Target $sam -Result 'Success' -Kind 'pw'
+            Write-PodeJsonResponse -Value @{ ok=$true }
+        } catch {
+            Write-Audit -Actor $s.username -Action 'Password reset' -Target $sam -Result 'Error' -Kind 'pw' -Detail $_.Exception.Message
+            Write-ApiError $_
+        }
     }
     Add-PodeRoute -Method Post -Path '/api/users/:sam/enable' -ScriptBlock {
         $s = Get-Session $WebEvent; if (-not $s) { Write-401; return }
         $sam = $WebEvent.Parameters['sam']; $en = [bool]$WebEvent.Data.enabled
-        Set-UserEnabled -Sam $sam -Enabled $en | Out-Null
-        Write-Audit -Actor $s.username -Action $(if($en){'User enabled'}else{'User disabled'}) -Target $sam -Result 'Success' -Kind 'user'
-        Write-PodeJsonResponse -Value @{ ok=$true }
+        try {
+            Set-UserEnabled -Sam $sam -Enabled $en | Out-Null
+            Write-Audit -Actor $s.username -Action $(if($en){'User enabled'}else{'User disabled'}) -Target $sam -Result 'Success' -Kind 'user'
+            Write-PodeJsonResponse -Value @{ ok=$true }
+        } catch {
+            Write-Audit -Actor $s.username -Action $(if($en){'User enable failed'}else{'User disable failed'}) -Target $sam -Result 'Error' -Kind 'user' -Detail $_.Exception.Message
+            Write-ApiError $_
+        }
     }
 
     # Bulk action over a list of sAMAccountNames: { action: 'disable'|'reset', sams: [...] }
@@ -570,7 +625,7 @@ WHEN NOT MATCHED THEN INSERT(Username,ConsoleRole,PwHash,PwSalt,Iterations,Enabl
                 $alerts += @{ type='Setup'; title='Connect an LDAP admin group'; detail='Map a security group to the System Administrator role (Access Control)'; badge='action required' }
             }
         } catch {}
-        try { foreach ($c in (Get-ExpiringCertificates -ConfigString $using:cs -Days 30)) { $alerts += @{ type='Certificate'; title=$c.subject; detail=$c.template; badge="exp $($c.expires)" } } } catch {}
+        try { if (-not [string]::IsNullOrWhiteSpace($using:cs)) { foreach ($c in (Get-ExpiringCertificates -ConfigString $using:cs -Days 30)) { $alerts += @{ type='Certificate'; title=$c.subject; detail=$c.template; badge="exp $($c.expires)" } } } } catch {}
         try { foreach ($p in (Get-ExpiringPasswords -Days 14)) { $alerts += @{ type='Password'; title=$p.sam; detail='AD password expiring'; badge="in $($p.daysLeft)d" } } } catch {}
         Write-PodeJsonResponse -Value @{ alerts=$alerts }
     }
@@ -579,129 +634,176 @@ WHEN NOT MATCHED THEN INSERT(Username,ConsoleRole,PwHash,PwSalt,Iterations,Enabl
     Add-PodeRoute -Method Get -Path '/api/contractor/:user' -ScriptBlock {
         if (-not (Get-Session $WebEvent)) { Write-401; return }
         $cfg = $using:Config
-        Write-PodeJsonResponse -Value (Get-ContractorInfo -Username $WebEvent.Parameters['user'] -Config $cfg)
+        try { Write-PodeJsonResponse -Value (Get-ContractorInfo -Username $WebEvent.Parameters['user'] -Config $cfg) }
+        catch { Write-ApiError $_ }
     }
 
     # ---------- AUDIT ----------
     Add-PodeRoute -Method Get -Path '/api/audit' -ScriptBlock {
         if (-not (Get-Session $WebEvent)) { Write-401; return }
-        Write-PodeJsonResponse -Value @{ events = @(Get-AuditLog -Kind $WebEvent.Query['kind']) }
+        try { Write-PodeJsonResponse -Value @{ events = @(Get-AuditLog -Kind $WebEvent.Query['kind']) } }
+        catch { Write-ApiError $_ }
     }
 
     # ---------- CERTIFICATE AUTHORITY ----------
     Add-PodeRoute -Method Get -Path '/api/ca/certs' -ScriptBlock {
         if (-not (Get-Session $WebEvent)) { Write-401; return }
-        Write-PodeJsonResponse -Value @{ certs = @(Get-IssuedCertificates -ConfigString $using:cs) }
+        # An unconfigured CA (empty ConfigString) used to crash parameter
+        # binding here -> raw 500 on every page load. Report it as a state
+        # the console can render instead.
+        if ([string]::IsNullOrWhiteSpace($using:cs)) {
+            Write-PodeJsonResponse -Value @{ certs = @(); configured = $false; hint = 'No Certificate Authority is configured. Set the CA host and common name in Settings, then restart the DSMT-Api service.' }; return
+        }
+        try { Write-PodeJsonResponse -Value @{ certs = @(Get-IssuedCertificates -ConfigString $using:cs); configured = $true } }
+        catch { Write-ApiError $_ }
     }
     Add-PodeRoute -Method Get -Path '/api/ca/pending' -ScriptBlock {
         if (-not (Get-Session $WebEvent)) { Write-401; return }
-        Write-PodeJsonResponse -Value @{ pending = @(Get-PendingRequests -ConfigString $using:cs) }
+        if ([string]::IsNullOrWhiteSpace($using:cs)) {
+            Write-PodeJsonResponse -Value @{ pending = @(); configured = $false; hint = 'No Certificate Authority is configured. Set the CA host and common name in Settings, then restart the DSMT-Api service.' }; return
+        }
+        try { Write-PodeJsonResponse -Value @{ pending = @(Get-PendingRequests -ConfigString $using:cs); configured = $true } }
+        catch { Write-ApiError $_ }
     }
     Add-PodeRoute -Method Post -Path '/api/ca/ping' -ScriptBlock {
         if (-not (Get-Session $WebEvent)) { Write-401; return }
         $target = if ($WebEvent.Data.configString) { $WebEvent.Data.configString } else { $using:cs }
-        Write-PodeJsonResponse -Value (Test-Ca -ConfigString $target)
+        if ([string]::IsNullOrWhiteSpace($target)) {
+            Write-PodeJsonResponse -Value @{ ok = $false; error = 'No Certificate Authority is configured.' }; return
+        }
+        try { Write-PodeJsonResponse -Value (Test-Ca -ConfigString $target) }
+        catch { Write-ApiError $_ }
     }
     Add-PodeRoute -Method Post -Path '/api/ca/publish-crl' -ScriptBlock {
         $s = Get-Session $WebEvent; if (-not $s) { Write-401; return }
-        $r = Publish-Crl -ConfigString $using:cs
-        Write-Audit -Actor $s.username -Action 'Publish CRL' -Target $using:cs -Result $(if($r.ok){'Success'}else{'Error'}) -Kind 'cert'
-        Write-PodeJsonResponse -Value $r
+        if ([string]::IsNullOrWhiteSpace($using:cs)) { Write-PodeJsonResponse -StatusCode 400 -Value @{ ok = $false; error = 'No Certificate Authority is configured.' }; return }
+        try {
+            $r = Publish-Crl -ConfigString $using:cs
+            Write-Audit -Actor $s.username -Action 'Publish CRL' -Target $using:cs -Result $(if($r.ok){'Success'}else{'Error'}) -Kind 'cert'
+            Write-PodeJsonResponse -Value $r
+        } catch { Write-ApiError $_ }
     }
     Add-PodeRoute -Method Post -Path '/api/ca/revoke' -ScriptBlock {
         $s = Get-Session $WebEvent; if (-not $s) { Write-401; return }
         $reason = if ($WebEvent.Data.reason) { [int]$WebEvent.Data.reason } else { 4 }
-        $r = Revoke-Certificate -ConfigString $using:cs -Serial $WebEvent.Data.serial -Reason $reason
-        Write-Audit -Actor $s.username -Action 'Revoke certificate' -Target $WebEvent.Data.serial -Result $(if($r.ok){'Success'}else{'Error'}) -Kind 'cert'
-        Write-PodeJsonResponse -Value $r
+        if ([string]::IsNullOrWhiteSpace($using:cs)) { Write-PodeJsonResponse -StatusCode 400 -Value @{ ok = $false; error = 'No Certificate Authority is configured.' }; return }
+        try {
+            $r = Revoke-Certificate -ConfigString $using:cs -Serial $WebEvent.Data.serial -Reason $reason
+            Write-Audit -Actor $s.username -Action 'Revoke certificate' -Target $WebEvent.Data.serial -Result $(if($r.ok){'Success'}else{'Error'}) -Kind 'cert'
+            Write-PodeJsonResponse -Value $r
+        } catch { Write-ApiError $_ }
     }
     Add-PodeRoute -Method Post -Path '/api/ca/approve' -ScriptBlock {
         $s = Get-Session $WebEvent; if (-not $s) { Write-401; return }
-        $r = Approve-Request -ConfigString $using:cs -RequestId ([int]$WebEvent.Data.id)
-        Write-Audit -Actor $s.username -Action 'Approve certificate request' -Target "$($WebEvent.Data.id)" -Result $(if($r.ok){'Success'}else{'Error'}) -Kind 'cert'
-        Write-PodeJsonResponse -Value $r
+        if ([string]::IsNullOrWhiteSpace($using:cs)) { Write-PodeJsonResponse -StatusCode 400 -Value @{ ok = $false; error = 'No Certificate Authority is configured.' }; return }
+        try {
+            $r = Approve-Request -ConfigString $using:cs -RequestId ([int]$WebEvent.Data.id)
+            Write-Audit -Actor $s.username -Action 'Approve certificate request' -Target "$($WebEvent.Data.id)" -Result $(if($r.ok){'Success'}else{'Error'}) -Kind 'cert'
+            Write-PodeJsonResponse -Value $r
+        } catch { Write-ApiError $_ }
     }
     Add-PodeRoute -Method Post -Path '/api/ca/deny' -ScriptBlock {
         $s = Get-Session $WebEvent; if (-not $s) { Write-401; return }
-        $r = Deny-Request -ConfigString $using:cs -RequestId ([int]$WebEvent.Data.id)
-        Write-Audit -Actor $s.username -Action 'Deny certificate request' -Target "$($WebEvent.Data.id)" -Result $(if($r.ok){'Success'}else{'Error'}) -Kind 'cert'
-        Write-PodeJsonResponse -Value $r
+        if ([string]::IsNullOrWhiteSpace($using:cs)) { Write-PodeJsonResponse -StatusCode 400 -Value @{ ok = $false; error = 'No Certificate Authority is configured.' }; return }
+        try {
+            $r = Deny-Request -ConfigString $using:cs -RequestId ([int]$WebEvent.Data.id)
+            Write-Audit -Actor $s.username -Action 'Deny certificate request' -Target "$($WebEvent.Data.id)" -Result $(if($r.ok){'Success'}else{'Error'}) -Kind 'cert'
+            Write-PodeJsonResponse -Value $r
+        } catch { Write-ApiError $_ }
     }
     Add-PodeRoute -Method Post -Path '/api/ca/backup' -ScriptBlock {
         $s = Get-Session $WebEvent; if (-not $s) { Write-401; return }
-        $r = Backup-CaDatabase -ConfigString $using:cs
-        Write-Audit -Actor $s.username -Action 'CA database backup' -Target $r.path -Result $(if($r.ok){'Success'}else{'Error'}) -Kind 'cert'
-        Write-PodeJsonResponse -Value $r
+        if ([string]::IsNullOrWhiteSpace($using:cs)) { Write-PodeJsonResponse -StatusCode 400 -Value @{ ok = $false; error = 'No Certificate Authority is configured.' }; return }
+        try {
+            $r = Backup-CaDatabase -ConfigString $using:cs
+            Write-Audit -Actor $s.username -Action 'CA database backup' -Target $r.path -Result $(if($r.ok){'Success'}else{'Error'}) -Kind 'cert'
+            Write-PodeJsonResponse -Value $r
+        } catch { Write-ApiError $_ }
     }
 
     # ---------- SECRETS (DPAPI-encrypted in SQL) ----------
     Add-PodeRoute -Method Get -Path '/api/secrets' -ScriptBlock {
         if (-not (Get-Session $WebEvent)) { Write-401; return }
-        Write-PodeJsonResponse -Value @{ secrets = @(Get-SecretList) }   # names/metadata only
+        try { Write-PodeJsonResponse -Value @{ secrets = @(Get-SecretList) } }   # names/metadata only
+        catch { Write-ApiError $_ }
     }
     Add-PodeRoute -Method Post -Path '/api/secrets' -ScriptBlock {
         $s = Get-Session $WebEvent; if (-not $s) { Write-401; return }
-        Set-Secret -Name $WebEvent.Data.name -Value $WebEvent.Data.value -Account $WebEvent.Data.account -By $s.username
-        Write-Audit -Actor $s.username -Action 'Secret saved' -Target $WebEvent.Data.name -Result 'Success' -Kind 'secret'
-        Write-PodeJsonResponse -Value @{ ok = $true }
+        try {
+            Set-Secret -Name $WebEvent.Data.name -Value $WebEvent.Data.value -Account $WebEvent.Data.account -By $s.username
+            Write-Audit -Actor $s.username -Action 'Secret saved' -Target $WebEvent.Data.name -Result 'Success' -Kind 'secret'
+            Write-PodeJsonResponse -Value @{ ok = $true }
+        } catch { Write-ApiError $_ }
     }
     Add-PodeRoute -Method Post -Path '/api/secrets/test' -ScriptBlock {
         if (-not (Get-Session $WebEvent)) { Write-401; return }
         $cfg = $using:Config
-        $ok = Test-ServiceAccount -Server $cfg.Directory.LdapServer -Account $WebEvent.Data.account -Password $WebEvent.Data.value -UseSsl:([bool]$cfg.Directory.UseSsl)
-        Write-PodeJsonResponse -Value @{ ok = $ok }
+        try {
+            $ok = Test-ServiceAccount -Server $cfg.Directory.LdapServer -Account $WebEvent.Data.account -Password $WebEvent.Data.value -UseSsl:([bool]$cfg.Directory.UseSsl)
+            Write-PodeJsonResponse -Value @{ ok = $ok }
+        } catch { Write-ApiError $_ }
     }
 
     # ---------- ACCESS CONTROL (role mappings, local accounts, sign-in policy) ----------
     Add-PodeRoute -Method Get -Path '/api/access/mappings' -ScriptBlock {
         if (-not (Get-Session $WebEvent)) { Write-401; return }
-        $rows = @(Get-RoleMappings | ForEach-Object { @{ id = [int]$_['Id']; group = [string]$_['LdapGroup']; role = [string]$_['ConsoleRole'] } })
-        Write-PodeJsonResponse -Value @{ mappings = $rows }
+        try {
+            $rows = @(Get-RoleMappings | ForEach-Object { @{ id = [int]$_['Id']; group = [string]$_['LdapGroup']; role = [string]$_['ConsoleRole'] } })
+            Write-PodeJsonResponse -Value @{ mappings = $rows }
+        } catch { Write-ApiError $_ }
     }
     Add-PodeRoute -Method Post -Path '/api/access/mappings' -ScriptBlock {
         $s = Get-Session $WebEvent; if (-not $s) { Write-401; return }
         $g = [string]$WebEvent.Data.group; $r = [string]$WebEvent.Data.role
         if ([string]::IsNullOrWhiteSpace($g) -or [string]::IsNullOrWhiteSpace($r)) {
-            Set-PodeResponseStatus -Code 400; Write-PodeJsonResponse -Value @{ ok=$false; error='group and role are required' }; return
+            Write-PodeJsonResponse -StatusCode 400 -Value @{ ok=$false; error='group and role are required' }; return
         }
-        Invoke-Sql @'
+        try {
+            Invoke-Sql @'
 MERGE dbo.RoleMappings AS t USING (SELECT @g AS LdapGroup) AS src ON t.LdapGroup=src.LdapGroup
 WHEN MATCHED THEN UPDATE SET ConsoleRole=@r
 WHEN NOT MATCHED THEN INSERT(LdapGroup,ConsoleRole) VALUES(@g,@r);
 '@ @{ g=$g; r=$r } -NonQuery | Out-Null
-        $id = Invoke-Sql 'SELECT Id FROM dbo.RoleMappings WHERE LdapGroup=@g' @{ g=$g } -Scalar
-        Write-Audit -Actor $s.username -Action 'Role mapping saved' -Target "$g -> $r" -Result 'Success' -Kind 'access'
-        Write-PodeJsonResponse -Value @{ ok=$true; id=[int]$id }
+            $id = Invoke-Sql 'SELECT Id FROM dbo.RoleMappings WHERE LdapGroup=@g' @{ g=$g } -Scalar
+            Write-Audit -Actor $s.username -Action 'Role mapping saved' -Target "$g -> $r" -Result 'Success' -Kind 'access'
+            Write-PodeJsonResponse -Value @{ ok=$true; id=[int]$id }
+        } catch { Write-ApiError $_ }
     }
     Add-PodeRoute -Method Delete -Path '/api/access/mappings/:id' -ScriptBlock {
         $s = Get-Session $WebEvent; if (-not $s) { Write-401; return }
-        Invoke-Sql 'DELETE FROM dbo.RoleMappings WHERE Id=@i' @{ i=[int]$WebEvent.Parameters['id'] } -NonQuery | Out-Null
-        Write-Audit -Actor $s.username -Action 'Role mapping removed' -Target $WebEvent.Parameters['id'] -Result 'Success' -Kind 'access'
-        Write-PodeJsonResponse -Value @{ ok=$true }
+        try {
+            Invoke-Sql 'DELETE FROM dbo.RoleMappings WHERE Id=@i' @{ i=[int]$WebEvent.Parameters['id'] } -NonQuery | Out-Null
+            Write-Audit -Actor $s.username -Action 'Role mapping removed' -Target $WebEvent.Parameters['id'] -Result 'Success' -Kind 'access'
+            Write-PodeJsonResponse -Value @{ ok=$true }
+        } catch { Write-ApiError $_ }
     }
     Add-PodeRoute -Method Get -Path '/api/access/local' -ScriptBlock {
         if (-not (Get-Session $WebEvent)) { Write-401; return }
-        $rows = @(Invoke-Sql 'SELECT Id,Username,ConsoleRole,Enabled,BuiltIn FROM dbo.LocalAccounts ORDER BY Id' | ForEach-Object {
-            @{ id = [int]$_['Id']; user = [string]$_['Username']; role = [string]$_['ConsoleRole']; enabled = [bool]$_['Enabled']; builtin = [bool]$_['BuiltIn'] }
-        })
-        Write-PodeJsonResponse -Value @{ accounts = $rows }
+        try {
+            $rows = @(Invoke-Sql 'SELECT Id,Username,ConsoleRole,Enabled,BuiltIn FROM dbo.LocalAccounts ORDER BY Id' | ForEach-Object {
+                @{ id = [int]$_['Id']; user = [string]$_['Username']; role = [string]$_['ConsoleRole']; enabled = [bool]$_['Enabled']; builtin = [bool]$_['BuiltIn'] }
+            })
+            Write-PodeJsonResponse -Value @{ accounts = $rows }
+        } catch { Write-ApiError $_ }
     }
     Add-PodeRoute -Method Post -Path '/api/access/local' -ScriptBlock {
         $s = Get-Session $WebEvent; if (-not $s) { Write-401; return }
         $u = [string]$WebEvent.Data.user; $role = [string]$WebEvent.Data.role; $pw = [string]$WebEvent.Data.password
         if ([string]::IsNullOrWhiteSpace($u) -or [string]::IsNullOrWhiteSpace($pw)) {
-            Set-PodeResponseStatus -Code 400; Write-PodeJsonResponse -Value @{ ok=$false; error='user and password are required' }; return
+            Write-PodeJsonResponse -StatusCode 400 -Value @{ ok=$false; error='user and password are required' }; return
         }
         if ([string]::IsNullOrWhiteSpace($role)) { $role = 'Operator' }
-        $h = New-PasswordHash -Password $pw
-        Invoke-Sql @'
+        try {
+            $h = New-PasswordHash -Password $pw
+            Invoke-Sql @'
 MERGE dbo.LocalAccounts AS t USING (SELECT @u AS Username) AS src ON t.Username=src.Username
 WHEN MATCHED THEN UPDATE SET ConsoleRole=@r, PwHash=@h, PwSalt=@sa, Iterations=@i, Enabled=1
 WHEN NOT MATCHED THEN INSERT(Username,ConsoleRole,PwHash,PwSalt,Iterations,Enabled,BuiltIn) VALUES(@u,@r,@h,@sa,@i,1,0);
 '@ @{ u=$u; r=$role; h=$h.Hash; sa=$h.Salt; i=$h.Iterations } -NonQuery | Out-Null
-        $id = Invoke-Sql 'SELECT Id FROM dbo.LocalAccounts WHERE Username=@u' @{ u=$u } -Scalar
-        Write-Audit -Actor $s.username -Action 'Local account saved' -Target $u -Result 'Success' -Kind 'access'
-        Write-PodeJsonResponse -Value @{ ok=$true; id=[int]$id }
+            $id = Invoke-Sql 'SELECT Id FROM dbo.LocalAccounts WHERE Username=@u' @{ u=$u } -Scalar
+            Write-Audit -Actor $s.username -Action 'Local account saved' -Target $u -Result 'Success' -Kind 'access'
+            Write-PodeJsonResponse -Value @{ ok=$true; id=[int]$id }
+        } catch { Write-ApiError $_ }
     }
     Add-PodeRoute -Method Post -Path '/api/access/local/:id/toggle' -ScriptBlock {
         $s = Get-Session $WebEvent; if (-not $s) { Write-401; return }
@@ -710,41 +812,41 @@ WHEN NOT MATCHED THEN INSERT(Username,ConsoleRole,PwHash,PwSalt,Iterations,Enabl
             Invoke-Sql 'UPDATE dbo.LocalAccounts SET Enabled=@e WHERE Id=@i' @{ e=$en; i=[int]$WebEvent.Parameters['id'] } -NonQuery | Out-Null
             Write-Audit -Actor $s.username -Action $(if($en -eq 1){'Local account enabled'}else{'Local account disabled'}) -Target $WebEvent.Parameters['id'] -Result 'Success' -Kind 'access'
             Write-PodeJsonResponse -Value @{ ok=$true }
-        } catch {
-            # Previously unguarded - a bad :id or a transient SQL error surfaced as
-            # a raw 500 with no body, which the console showed as "Failed to fetch"
-            # (indistinguishable from a network problem). Give it a readable error.
-            Set-PodeResponseStatus -Code 400
-            Write-PodeJsonResponse -Value @{ ok = $false; error = $_.Exception.Message }
-        }
+        } catch { Write-ApiError $_ }
     }
     Add-PodeRoute -Method Delete -Path '/api/access/local/:id' -ScriptBlock {
         $s = Get-Session $WebEvent; if (-not $s) { Write-401; return }
-        $builtin = Invoke-Sql 'SELECT BuiltIn FROM dbo.LocalAccounts WHERE Id=@i' @{ i=[int]$WebEvent.Parameters['id'] } -Scalar
-        if ([bool]$builtin) { Set-PodeResponseStatus -Code 400; Write-PodeJsonResponse -Value @{ ok=$false; error='The built-in administrator cannot be removed.' }; return }
-        Invoke-Sql 'DELETE FROM dbo.LocalAccounts WHERE Id=@i' @{ i=[int]$WebEvent.Parameters['id'] } -NonQuery | Out-Null
-        Write-Audit -Actor $s.username -Action 'Local account removed' -Target $WebEvent.Parameters['id'] -Result 'Success' -Kind 'access'
-        Write-PodeJsonResponse -Value @{ ok=$true }
+        try {
+            $builtin = Invoke-Sql 'SELECT BuiltIn FROM dbo.LocalAccounts WHERE Id=@i' @{ i=[int]$WebEvent.Parameters['id'] } -Scalar
+            if ([bool]$builtin) { Write-PodeJsonResponse -StatusCode 400 -Value @{ ok=$false; error='The built-in administrator cannot be removed.' }; return }
+            Invoke-Sql 'DELETE FROM dbo.LocalAccounts WHERE Id=@i' @{ i=[int]$WebEvent.Parameters['id'] } -NonQuery | Out-Null
+            Write-Audit -Actor $s.username -Action 'Local account removed' -Target $WebEvent.Parameters['id'] -Result 'Success' -Kind 'access'
+            Write-PodeJsonResponse -Value @{ ok=$true }
+        } catch { Write-ApiError $_ }
     }
 
     # ---------- SETTINGS BACKUP / RESTORE ----------
     Add-PodeRoute -Method Get -Path '/api/settings/export' -ScriptBlock {
         if (-not (Get-Session $WebEvent)) { Write-401; return }
         # Config + role mappings (NOT secrets - those never leave the server in clear).
-        Write-PodeJsonResponse -Value @{ exportedAt = (Get-Date).ToString('o'); config = (Get-Config); roleMappings = @(Get-RoleMappings) }
+        try { Write-PodeJsonResponse -Value @{ exportedAt = (Get-Date).ToString('o'); config = (Get-Config); roleMappings = @(Get-RoleMappings) } }
+        catch { Write-ApiError $_ }
     }
     Add-PodeRoute -Method Post -Path '/api/settings/import' -ScriptBlock {
         $s = Get-Session $WebEvent; if (-not $s) { Write-401; return }
         $cfg = $WebEvent.Data.config
-        if ($cfg) { foreach ($k in $cfg.PSObject.Properties.Name) { Set-Config -Key $k -Value ([string]$cfg.$k) -By $s.username } }
-        Write-Audit -Actor $s.username -Action 'Settings imported' -Target 'config' -Result 'Success' -Kind 'config'
-        Write-PodeJsonResponse -Value @{ ok = $true }
+        try {
+            if ($cfg) { foreach ($k in $cfg.PSObject.Properties.Name) { Set-Config -Key $k -Value ([string]$cfg.$k) -By $s.username } }
+            Write-Audit -Actor $s.username -Action 'Settings imported' -Target 'config' -Result 'Success' -Kind 'config'
+            Write-PodeJsonResponse -Value @{ ok = $true }
+        } catch { Write-ApiError $_ }
     }
 
     # ---------- DIAGNOSTICS ----------
     Add-PodeRoute -Method Get -Path '/api/diag/dcs' -ScriptBlock {
         if (-not (Get-Session $WebEvent)) { Write-401; return }
         $m = if ($WebEvent.Query['method']) { $WebEvent.Query['method'] } else { 'auto' }
+        try {
         $hosts = Get-DomainControllers -Method $m
         $controllers = @(Test-DcServices -Hosts $hosts)
         # Extended mode adds replication + dcdiag health per host, on top of
@@ -760,14 +862,17 @@ WHEN NOT MATCHED THEN INSERT(Username,ConsoleRole,PwHash,PwSalt,Iterations,Enabl
             }
         }
         Write-PodeJsonResponse -Value @{ controllers = $controllers }
+        } catch { Write-ApiError $_ }
     }
     Add-PodeRoute -Method Post -Path '/api/diag/exchange' -ScriptBlock {
         if (-not (Get-Session $WebEvent)) { Write-401; return }
         # Accepts a single 'host' or a 'hosts' array - checks each member server directly.
         $hosts = if ($WebEvent.Data.hosts) { @($WebEvent.Data.hosts) } else { @($WebEvent.Data.host) }
-        $results = @()
-        foreach ($h in ($hosts | Where-Object { $_ })) { $results += (Test-ExchangeServer -ExchangeHost $h) }
-        Write-PodeJsonResponse -Value @{ results = $results }
+        try {
+            $results = @()
+            foreach ($h in ($hosts | Where-Object { $_ })) { $results += (Test-ExchangeServer -ExchangeHost $h) }
+            Write-PodeJsonResponse -Value @{ results = $results }
+        } catch { Write-ApiError $_ }
     }
     Add-PodeRoute -Method Post -Path '/api/diag/message' -ScriptBlock {
         $s = Get-Session $WebEvent; if (-not $s) { Write-401; return }
@@ -784,7 +889,7 @@ WHEN NOT MATCHED THEN INSERT(Username,ConsoleRole,PwHash,PwSalt,Iterations,Enabl
         $password   = if ($null -ne $WebEvent.Data.password -and $WebEvent.Data.password -ne '') { $WebEvent.Data.password } else { $cfg.Smtp.Password }
         $useTls     = if ($null -ne $WebEvent.Data.useTls) { [bool]$WebEvent.Data.useTls } else { [bool]$cfg.Smtp.UseTls }
         if ([string]::IsNullOrWhiteSpace($smtpServer)) {
-            Set-PodeResponseStatus -Code 400; Write-PodeJsonResponse -Value @{ ok=$false; error='No SMTP server configured - set one in Settings > Notifications first.' }; return
+            Write-PodeJsonResponse -StatusCode 400 -Value @{ ok=$false; error='No SMTP server configured - set one in Settings > Notifications first.' }; return
         }
         $r = Send-TestMessage -SmtpServer $smtpServer -To $WebEvent.Data.to -From $from -Subject $WebEvent.Data.subject -Body $WebEvent.Data.body -Port $port -Simulate:$sim -Username $username -Password $password -UseTls:$useTls
         Write-Audit -Actor $s.username -Action $(if($sim){'Test message simulated'}else{'Test message sent'}) -Target $WebEvent.Data.to -Result $(if($r.ok){'Success'}else{'Error'}) -Kind 'diag'
@@ -812,7 +917,7 @@ WHEN NOT MATCHED THEN INSERT(Username,ConsoleRole,PwHash,PwSalt,Iterations,Enabl
         if ($null -ne $d.password -and $d.password -ne '') { $cfg.Smtp.Password = $d.password }
         if ($null -ne $d.useTls)   { $cfg.Smtp.UseTls   = [bool]$d.useTls }
         try { Save-Config -Cfg $cfg -Path $using:cfgPath; Write-Audit -Actor $s.username -Action 'SMTP settings saved' -Target $cfg.Smtp.Server -Result 'Success' -Kind 'diag'; Write-PodeJsonResponse -Value @{ ok=$true } }
-        catch { Set-PodeResponseStatus -Code 400; Write-PodeJsonResponse -Value @{ ok=$false; error=$_.Exception.Message } }
+        catch { Write-ApiError $_ }
     }
 
     # ---------- SCHEDULED DIAGNOSTICS REPORT ----------
@@ -864,7 +969,7 @@ WHEN NOT MATCHED THEN INSERT(Username,ConsoleRole,PwHash,PwSalt,Iterations,Enabl
             Write-Audit -Actor $s.username -Action $(if($cfg.Diagnostics.ReportEnabled){'Diagnostics report scheduled'}else{'Diagnostics report schedule disabled'}) -Target $cfg.Diagnostics.ReportRecipients -Result 'Success' -Kind 'diag'
             Write-PodeJsonResponse -Value @{ ok=$true }
         } catch {
-            Set-PodeResponseStatus -Code 400; Write-PodeJsonResponse -Value @{ ok=$false; error=$_.Exception.Message }
+            Write-PodeJsonResponse -StatusCode 400 -Value @{ ok=$false; error=$_.Exception.Message }
         }
     }
     Add-PodeRoute -Method Delete -Path '/api/diag/schedule' -ScriptBlock {
@@ -876,7 +981,7 @@ WHEN NOT MATCHED THEN INSERT(Username,ConsoleRole,PwHash,PwSalt,Iterations,Enabl
             Save-Config -Cfg $cfg -Path $using:cfgPath
             Write-Audit -Actor $s.username -Action 'Diagnostics report schedule removed' -Target 'DSMT-DiagReport' -Result 'Success' -Kind 'diag'
             Write-PodeJsonResponse -Value @{ ok=$true }
-        } catch { Set-PodeResponseStatus -Code 400; Write-PodeJsonResponse -Value @{ ok=$false; error=$_.Exception.Message } }
+        } catch { Write-ApiError $_ }
     }
     Add-PodeRoute -Method Post -Path '/api/diag/report/run' -ScriptBlock {
         $s = Get-Session $WebEvent; if (-not $s) { Write-401; return }
@@ -884,14 +989,14 @@ WHEN NOT MATCHED THEN INSERT(Username,ConsoleRole,PwHash,PwSalt,Iterations,Enabl
         $dcHosts = @($cfg.Diagnostics.DcHosts -split '[,;\r\n]+' | Where-Object { $_ })
         $exHosts = @($cfg.Diagnostics.ExchangeHosts -split '[,;\r\n]+' | Where-Object { $_ })
         $recipients = @($cfg.Diagnostics.ReportRecipients -split '[,;\r\n]+' | Where-Object { $_ })
-        if ($recipients.Count -eq 0) { Set-PodeResponseStatus -Code 400; Write-PodeJsonResponse -Value @{ ok=$false; error='No report recipients configured.' }; return }
+        if ($recipients.Count -eq 0) { Write-PodeJsonResponse -StatusCode 400 -Value @{ ok=$false; error='No report recipients configured.' }; return }
         try {
             $r = Send-DiagnosticsReport -Smtp $cfg.Smtp -DcHosts $dcHosts -ExchangeHosts $exHosts -Recipients $recipients
             Write-Audit -Actor $s.username -Action 'Diagnostics report run (manual)' -Target ($recipients -join ',') -Result 'Success' -Kind 'diag'
             Write-PodeJsonResponse -Value $r
         } catch {
             Write-Audit -Actor $s.username -Action 'Diagnostics report run (manual)' -Target ($recipients -join ',') -Result 'Error' -Kind 'diag' -Detail $_.Exception.Message
-            Set-PodeResponseStatus -Code 400; Write-PodeJsonResponse -Value @{ ok=$false; error=$_.Exception.Message }
+            Write-PodeJsonResponse -StatusCode 400 -Value @{ ok=$false; error=$_.Exception.Message }
         }
     }
 
@@ -908,14 +1013,14 @@ WHEN NOT MATCHED THEN INSERT(Username,ConsoleRole,PwHash,PwSalt,Iterations,Enabl
         $s = Get-Session $WebEvent; if (-not $s) { Write-401; return }
         $d = $WebEvent.Data
         if ([string]::IsNullOrWhiteSpace($d.server) -or [string]::IsNullOrWhiteSpace($d.username) -or [string]::IsNullOrWhiteSpace($d.password)) {
-            Set-PodeResponseStatus -Code 400; Write-PodeJsonResponse -Value @{ ok=$false; error='server, username and password are all required.' }; return
+            Write-PodeJsonResponse -StatusCode 400 -Value @{ ok=$false; error='server, username and password are all required.' }; return
         }
         try {
             $id = Add-VCenterConnection -Server $d.server -Username $d.username -Password $d.password -AllowUntrustedCert:([bool]$d.allowUntrustedCert)
             Write-Audit -Actor $s.username -Action 'vCenter connection saved' -Target $d.server -Result 'Success' -Kind 'vcenter'
             Write-PodeJsonResponse -Value @{ ok=$true; id=$id }
         } catch {
-            Set-PodeResponseStatus -Code 400; Write-PodeJsonResponse -Value @{ ok=$false; error=$_.Exception.Message }
+            Write-PodeJsonResponse -StatusCode 400 -Value @{ ok=$false; error=$_.Exception.Message }
         }
     }
     Add-PodeRoute -Method Delete -Path '/api/vcenter/connections/:id' -ScriptBlock {
@@ -925,7 +1030,7 @@ WHEN NOT MATCHED THEN INSERT(Username,ConsoleRole,PwHash,PwSalt,Iterations,Enabl
             Remove-VCenterConnection -Id $id
             Write-Audit -Actor $s.username -Action 'vCenter connection removed' -Target "$id" -Result 'Success' -Kind 'vcenter'
             Write-PodeJsonResponse -Value @{ ok=$true }
-        } catch { Set-PodeResponseStatus -Code 400; Write-PodeJsonResponse -Value @{ ok=$false; error=$_.Exception.Message } }
+        } catch { Write-ApiError $_ }
     }
     Add-PodeRoute -Method Post -Path '/api/vcenter/connections/:id/toggle' -ScriptBlock {
         $s = Get-Session $WebEvent; if (-not $s) { Write-401; return }
@@ -934,7 +1039,7 @@ WHEN NOT MATCHED THEN INSERT(Username,ConsoleRole,PwHash,PwSalt,Iterations,Enabl
             Set-VCenterConnectionEnabled -Id $id -Enabled $en
             Write-Audit -Actor $s.username -Action $(if($en){'vCenter connection enabled'}else{'vCenter connection disabled'}) -Target "$id" -Result 'Success' -Kind 'vcenter'
             Write-PodeJsonResponse -Value @{ ok=$true }
-        } catch { Set-PodeResponseStatus -Code 400; Write-PodeJsonResponse -Value @{ ok=$false; error=$_.Exception.Message } }
+        } catch { Write-ApiError $_ }
     }
     # Pulls fresh permissions from vCenter/ESXi right now and stores a new
     # timestamped snapshot - can take a while (PowerCLI connect + full
@@ -950,7 +1055,7 @@ WHEN NOT MATCHED THEN INSERT(Username,ConsoleRole,PwHash,PwSalt,Iterations,Enabl
             Write-PodeJsonResponse -Value @{ ok=$true; count=$r.count; syncId="$($r.syncId)" }
         } catch {
             Write-Audit -Actor $s.username -Action 'vCenter sync' -Target "$id" -Result 'Error' -Kind 'vcenter' -Detail $_.Exception.Message
-            Set-PodeResponseStatus -Code 400; Write-PodeJsonResponse -Value @{ ok=$false; error=$_.Exception.Message }
+            Write-PodeJsonResponse -StatusCode 400 -Value @{ ok=$false; error=$_.Exception.Message }
         }
     }
     Add-PodeRoute -Method Get -Path '/api/vcenter/connections/:id/permissions' -ScriptBlock {
@@ -961,7 +1066,7 @@ WHEN NOT MATCHED THEN INSERT(Username,ConsoleRole,PwHash,PwSalt,Iterations,Enabl
                 @{ principal=[string]$_['Principal']; role=[string]$_['Role']; entity=[string]$_['Entity']; entityType=[string]$_['EntityType']; propagate=[bool]$_['Propagate']; isGroup=[bool]$_['IsGroup']; capturedAt="$($_['CapturedAt'])" }
             })
             Write-PodeJsonResponse -Value @{ permissions = $rows }
-        } catch { Set-PodeResponseStatus -Code 400; Write-PodeJsonResponse -Value @{ ok=$false; error=$_.Exception.Message } }
+        } catch { Write-ApiError $_ }
     }
     Add-PodeRoute -Method Get -Path '/api/vcenter/connections/:id/history' -ScriptBlock {
         if (-not (Get-Session $WebEvent)) { Write-401; return }
@@ -971,21 +1076,21 @@ WHEN NOT MATCHED THEN INSERT(Username,ConsoleRole,PwHash,PwSalt,Iterations,Enabl
                 @{ syncId="$($_['SyncId'])"; syncedAt="$($_['SyncedAt'])"; entryCount=[int]$_['EntryCount'] }
             })
             Write-PodeJsonResponse -Value @{ history = $rows }
-        } catch { Set-PodeResponseStatus -Code 400; Write-PodeJsonResponse -Value @{ ok=$false; error=$_.Exception.Message } }
+        } catch { Write-ApiError $_ }
     }
 
     # ---------- REMOTE EVENT VIEWER ----------
     Add-PodeRoute -Method Get -Path '/api/events' -ScriptBlock {
         if (-not (Get-Session $WebEvent)) { Write-401; return }
         $server = $WebEvent.Query['server']
-        if ([string]::IsNullOrWhiteSpace($server)) { Set-PodeResponseStatus -Code 400; Write-PodeJsonResponse -Value @{ error = 'server is required' }; return }
+        if ([string]::IsNullOrWhiteSpace($server)) { Write-PodeJsonResponse -StatusCode 400 -Value @{ error = 'server is required' }; return }
         $log   = if ($WebEvent.Query['log'])   { $WebEvent.Query['log'] }        else { 'System' }
         $hours = if ($WebEvent.Query['hours']) { [int]$WebEvent.Query['hours'] } else { 24 }
         $q     = $WebEvent.Query['q']
         $lv    = @(1,2,3)
         if ($WebEvent.Query['levels']) { $lv = @($WebEvent.Query['levels'] -split ',' | ForEach-Object { [int]$_ }) }
         try { Write-PodeJsonResponse -Value @{ events = @(Get-RemoteEvents -Server $server -LogName $log -Hours $hours -Levels $lv -Query $q) } }
-        catch { Set-PodeResponseStatus -Code 400; Write-PodeJsonResponse -Value @{ error = $_.Exception.Message } }
+        catch { Write-ApiError $_ }
     }
 
     # ---------- USER LOCK / UNLOCK ----------
@@ -993,6 +1098,7 @@ WHEN NOT MATCHED THEN INSERT(Username,ConsoleRole,PwHash,PwSalt,Iterations,Enabl
         $s = Get-Session $WebEvent; if (-not $s) { Write-401; return }
         $sam = $WebEvent.Parameters['sam']
         $lock = [bool]$WebEvent.Data.locked
+        try {
         if ($lock) {
             # AD has no direct "lock" cmdlet; force lockout via repeated bad password
             # is not safe for automation - we disable the account instead and note it
@@ -1005,6 +1111,10 @@ WHEN NOT MATCHED THEN INSERT(Username,ConsoleRole,PwHash,PwSalt,Iterations,Enabl
             Write-Audit -Actor $s.username -Action 'User unlocked' -Target $sam -Result 'Success' -Kind 'lock'
             Write-PodeJsonResponse -Value @{ ok=$true; locked=$false }
         }
+        } catch {
+            Write-Audit -Actor $s.username -Action $(if($lock){'User lock failed'}else{'User unlock failed'}) -Target $sam -Result 'Error' -Kind 'lock' -Detail $_.Exception.Message
+            Write-ApiError $_
+        }
     }
 
     # ---------- CREATE USER ----------
@@ -1014,16 +1124,13 @@ WHEN NOT MATCHED THEN INSERT(Username,ConsoleRole,PwHash,PwSalt,Iterations,Enabl
         $name = if ($WebEvent.Data.name) { $WebEvent.Data.name } else { $sam }
         $cfg = $using:Config
         $ou   = if ($WebEvent.Data.ou)   { $WebEvent.Data.ou }   else { $cfg.Directory.BaseDN }
-        if (-not $sam) { Set-PodeResponseStatus -Code 400; Write-PodeJsonResponse -Value @{ ok=$false; error='sam is required' }; return }
+        if (-not $sam) { Write-PodeJsonResponse -StatusCode 400 -Value @{ ok=$false; error='sam is required' }; return }
         $initPw = 'Tmp-' + [guid]::NewGuid().ToString('N').Substring(0,10) + '!Aa1'
         try {
             New-DirectoryUser -Sam $sam -DisplayName $name -Ou $ou -InitialPassword $initPw | Out-Null
             Write-Audit -Actor $s.username -Action 'User created' -Target $sam -Result 'Success' -Kind 'user'
             Write-PodeJsonResponse -Value @{ ok=$true; sam=$sam; initialPassword=$initPw }
-        } catch {
-            Set-PodeResponseStatus -Code 400
-            Write-PodeJsonResponse -Value @{ ok=$false; error=$_.Exception.Message }
-        }
+        } catch { Write-ApiError $_ }
     }
 
     # ---------- GROUP MEMBERS (add / remove) ----------
@@ -1031,16 +1138,13 @@ WHEN NOT MATCHED THEN INSERT(Username,ConsoleRole,PwHash,PwSalt,Iterations,Enabl
         $s = Get-Session $WebEvent; if (-not $s) { Write-401; return }
         $group = $WebEvent.Parameters['name']
         $sam   = $WebEvent.Data.sam
-        if (-not $sam) { Set-PodeResponseStatus -Code 400; Write-PodeJsonResponse -Value @{ ok=$false; error='sam is required' }; return }
+        if (-not $sam) { Write-PodeJsonResponse -StatusCode 400 -Value @{ ok=$false; error='sam is required' }; return }
         try {
             Import-Module ActiveDirectory -ErrorAction Stop
             Add-ADGroupMember -Identity $group -Members $sam -Confirm:$false
             Write-Audit -Actor $s.username -Action 'Group member added' -Target "$group <- $sam" -Result 'Success' -Kind 'user'
             Write-PodeJsonResponse -Value @{ ok=$true }
-        } catch {
-            Set-PodeResponseStatus -Code 400
-            Write-PodeJsonResponse -Value @{ ok=$false; error=$_.Exception.Message }
-        }
+        } catch { Write-ApiError $_ }
     }
     Add-PodeRoute -Method Delete -Path '/api/groups/:name/members/:sam' -ScriptBlock {
         $s = Get-Session $WebEvent; if (-not $s) { Write-401; return }
@@ -1051,10 +1155,7 @@ WHEN NOT MATCHED THEN INSERT(Username,ConsoleRole,PwHash,PwSalt,Iterations,Enabl
             Remove-ADGroupMember -Identity $group -Members $sam -Confirm:$false
             Write-Audit -Actor $s.username -Action 'Group member removed' -Target "$group -/- $sam" -Result 'Success' -Kind 'user'
             Write-PodeJsonResponse -Value @{ ok=$true }
-        } catch {
-            Set-PodeResponseStatus -Code 400
-            Write-PodeJsonResponse -Value @{ ok=$false; error=$_.Exception.Message }
-        }
+        } catch { Write-ApiError $_ }
     }
 
     # ---------- SCHEDULED JOBS (Windows Task Scheduler) ----------
@@ -1067,10 +1168,7 @@ WHEN NOT MATCHED THEN INSERT(Username,ConsoleRole,PwHash,PwSalt,Iterations,Enabl
             if ($enabled) { Enable-ScheduledTask -InputObject $task | Out-Null } else { Disable-ScheduledTask -InputObject $task | Out-Null }
             Write-Audit -Actor $s.username -Action $(if($enabled){'Job enabled'}else{'Job disabled'}) -Target $name -Result 'Success' -Kind 'sync'
             Write-PodeJsonResponse -Value @{ ok=$true; enabled=$enabled }
-        } catch {
-            Set-PodeResponseStatus -Code 400
-            Write-PodeJsonResponse -Value @{ ok=$false; error=$_.Exception.Message }
-        }
+        } catch { Write-ApiError $_ }
     }
     Add-PodeRoute -Method Post -Path '/api/jobs/:name/run' -ScriptBlock {
         $s = Get-Session $WebEvent; if (-not $s) { Write-401; return }
@@ -1079,10 +1177,7 @@ WHEN NOT MATCHED THEN INSERT(Username,ConsoleRole,PwHash,PwSalt,Iterations,Enabl
             Start-ScheduledTask -TaskName $name -ErrorAction Stop
             Write-Audit -Actor $s.username -Action 'Job run manually' -Target $name -Result 'Success' -Kind 'sync'
             Write-PodeJsonResponse -Value @{ ok=$true }
-        } catch {
-            Set-PodeResponseStatus -Code 400
-            Write-PodeJsonResponse -Value @{ ok=$false; error=$_.Exception.Message }
-        }
+        } catch { Write-ApiError $_ }
     }
 
     # ---------- CONFIG SAVE (from console Settings tabs) ----------
@@ -1099,7 +1194,7 @@ WHEN NOT MATCHED THEN INSERT(Username,ConsoleRole,PwHash,PwSalt,Iterations,Enabl
             }
         }
         try { Save-Config -Cfg $cfg -Path $using:cfgPath; Write-PodeJsonResponse -Value @{ ok=$true } }
-        catch { Set-PodeResponseStatus -Code 400; Write-PodeJsonResponse -Value @{ ok=$false; error=$_.Exception.Message } }
+        catch { Write-ApiError $_ }
     }
     # Lets the console's Settings -> General "Test connection" button check the
     # LDAP server/Base DN currently typed in the form - before Save, so a typo
@@ -1130,7 +1225,7 @@ WHEN NOT MATCHED THEN INSERT(Username,ConsoleRole,PwHash,PwSalt,Iterations,Enabl
         if ($d.commonName) { $cfg.CertificateAuthority.CommonName = $d.commonName }
         $cfg.CertificateAuthority.ConfigString = "$($cfg.CertificateAuthority.Host)\$($cfg.CertificateAuthority.CommonName)"
         try { Save-Config -Cfg $cfg -Path $using:cfgPath; Write-PodeJsonResponse -Value @{ ok=$true } }
-        catch { Set-PodeResponseStatus -Code 400; Write-PodeJsonResponse -Value @{ ok=$false; error=$_.Exception.Message } }
+        catch { Write-ApiError $_ }
     }
     Add-PodeRoute -Method Post -Path '/api/db/config' -ScriptBlock {
         $s = Get-Session $WebEvent; if (-not $s) { Write-401; return }
@@ -1144,7 +1239,7 @@ WHEN NOT MATCHED THEN INSERT(Username,ConsoleRole,PwHash,PwSalt,Iterations,Enabl
         if ($null -ne $d.password) { $cfg.Database.Password = $d.password }
         if ($null -ne $d.encrypt) { $cfg.Database.Encrypt = [bool]$d.encrypt }
         try { Save-Config -Cfg $cfg -Path $using:cfgPath; Write-PodeJsonResponse -Value @{ ok=$true } }
-        catch { Set-PodeResponseStatus -Code 400; Write-PodeJsonResponse -Value @{ ok=$false; error=$_.Exception.Message } }
+        catch { Write-ApiError $_ }
     }
 
     Write-Host "Directory Services Management Tool API listening on $proto`://$($Config.Api.ListenAddress):$($Config.Api.Port)"
