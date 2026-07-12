@@ -37,10 +37,15 @@ function Get-GroupMembers {
             # DisplayName is frequently blank on lab/test accounts (and on nested
             # group members, which have no mail/title at all) - fall back to the
             # sAMAccountName so the row still shows something identifying instead
-            # of a blank cell.
+            # of a blank cell. Foreign security principals (members resolved from a
+            # trusted/foreign domain) have NEITHER - sAMAccountName is null - which
+            # previously rendered as a totally blank row with just a "?" avatar and
+            # no way to tell which member that even was. Fall back to the object's
+            # SID in that case so every row has a label.
+            $label = if ($_.DisplayName) { $_.DisplayName } elseif ($_.sAMAccountName) { $_.sAMAccountName } else { "Unresolved principal ($($_.ObjectGUID))" }
             [pscustomobject]@{
-                sam     = $_.sAMAccountName
-                name    = if ($_.DisplayName) { $_.DisplayName } else { $_.sAMAccountName }
+                sam     = if ($_.sAMAccountName) { $_.sAMAccountName } else { "$($_.ObjectGUID)" }
+                name    = $label
                 email   = $_.mail
                 title   = $_.title
                 type    = if ($_.objectClass -eq 'group') { 'Group' } else { 'User' }
