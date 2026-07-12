@@ -1,5 +1,13 @@
 # Changelog
 All notable changes to the Directory Services Management Tool.
+## 3.38.1 (index-new.html + Directory.psm1)
+Field-testing follow-up: found and fixed the actual root cause of the permanent "[bundle] error" banner shown at the bottom of every screenshot in the last round.
+
+- **Root cause of the persistent "[bundle] error" banner**: `index-new.html` loaded Google Fonts from `fonts.googleapis.com`/`fonts.gstatic.com` - a violation of this project's offline/self-contained rule (`CLAUDE.md`: "no external CDN") and, on the user's air-gapped server, an `ERR_NAME_NOT_RESOLVED` resource-load failure. The bundler harness's `window.addEventListener('error', ..., true)` catches resource-load errors too, not just script errors, so this single failed `<link>` request wrote a permanent, generic "[bundle] error" line into the on-screen error banner every time the page loaded - unrelated to any actual app bug. Removed both `<link>` tags; the font-family declarations already list system fallbacks, so text still renders (just without the specific webfont weights).
+- **Groups: unresolvable/foreign members no longer render as blank rows**: `Get-GroupMembers` (`Directory.psm1`) fell back to `sAMAccountName` when `DisplayName` was blank, but foreign security principals (members resolved from a trusted/foreign domain) have neither - rendering as a bare "?" avatar with no label and no way to tell which member that even was. Now labeled `Unresolved principal (<object GUID>)` instead of blank.
+- **"Re-check" (Service health) button**: the Live-mode path called the real `/api/health` refresh but showed no success/failure toast (unlike Demo mode), so a working refresh looked like a dead button. Added the same toast feedback both ways.
+- Verified via Playwright against the mock API + static grep verification (googleapis references: 0, version bumped, both toast strings present); JSON/brace-balance checks pass.
+
 ## 3.38.0 (index-new.html + API + installer)
 Field-testing fix round: real errors finally reach the console, CA routes no longer 500, re-installing never locks anyone out, an existing installation prefills the setup wizard, and a set of console UX corrections from real-world testing - `index-new.html` only on the console side, `index.html` unchanged.
 

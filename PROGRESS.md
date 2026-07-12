@@ -7,11 +7,20 @@ useful context under "Notes" so a fresh session (with no chat history) can
 pick up immediately.
 
 ## Current version
-3.38.0 (index-new.html preview) / 3.32.3 (shipped index.html console) — see
+3.38.1 (index-new.html preview) / 3.32.3 (shipped index.html console) — see
 `CHANGELOG.md` for the authoritative log.
 
 ## Open tasks
-- **v3.38.0 fix round shipped (this session)** - see CHANGELOG 3.38.0. Root
+- **v3.38.1 shipped (this session)**: found the actual root cause of the
+  permanent "[bundle] error" banner the user saw on every screenshot -
+  index-new.html loaded Google Fonts from a CDN (fonts.googleapis.com),
+  which fails ERR_NAME_NOT_RESOLVED on the air-gapped server and trips the
+  bundler harness's window 'error' listener. Removed it (also fixes the
+  offline/self-contained rule violation). Also fixed: Get-GroupMembers
+  labeling foreign/unresolvable AD principals instead of rendering blank
+  rows, and the Service Health "Re-check" button missing toast feedback in
+  Live mode (was working, just looked dead).
+- **v3.38.0 fix round (prior session)** - see CHANGELOG 3.38.0. Root
   causes fixed: Pode HTML error page garbling JSON error bodies (all
   `Set-PodeResponseStatus -Code 4xx; Write-PodeJsonResponse` combos replaced
   with `Write-PodeJsonResponse -StatusCode` via new `Write-ApiError` helper),
@@ -21,25 +30,28 @@ pick up immediately.
   console UX round (Hafala Settings card removed, palette dropdown, sidebar
   controls moved to top, Schema/Maintenance panels removed, Directory
   section in Settings > General, alert click-through + auto-clear).
-- **Remaining field reports NOT yet addressed** (user's button-by-button
-  audit, still open):
-  - User Management: verify actions now work once the service account gets
-    AD delegation (new Deployment Guide section explains the grant). The
-    field failures were genuine missing-delegation errors, now surfaced
-    clearly as 403s.
-  - Groups page: selected group does not show real member list; "Add member"
-    reported not working - needs another field round with the new error
-    surfacing to see the real reason.
-  - Event Viewer "doesn't work" - `/api/events` requires a `server` query
-    param; check what the console sends in the field.
-  - Scheduled Jobs run: HTTP 400 with no detail - re-test in field; error
-    body will now carry the real Task Scheduler message.
-  - vCenter sync 400 - same: re-test, the PowerCLI-missing hint + real error
-    now comes through; offline PowerCLI install package guidance requested.
+- **Still open from the user's live button-by-button audit** - most of
+  these are now expected to show REAL error detail once v3.38.0/3.38.1 are
+  deployed (the field logs the user shared were confirmed to be from the
+  OLD server binary - stale line numbers in the stack traces):
+  - Lock / Disable in User Management - root cause already identified as
+    missing AD delegation for the DSMT service account; needs re-test after
+    redeploy + delegation grant (see Deployment_Guide's new AD permissions
+    section).
+  - Event Viewer query 400 - needs re-test after redeploy; likely RPC/
+    firewall or Event Log Readers rights on the target DC, now that the
+    real error will surface.
+  - Scheduled Jobs run / vCenter sync 400s - same, re-test after redeploy.
   - Certificate Authority: user wants REAL cert issuance (submit a request)
     and templates loaded from the CA - currently only list/approve/revoke
     exist server-side. Real feature work, not yet started.
-  - "Whole site must be real" button-by-button audit - ongoing.
+  - Full button-by-button audit against real API responses - ongoing, user
+    is doing this workspace by workspace.
+- **IMPORTANT for whoever continues this**: confirm the user has actually
+  redeployed `DSMT_Api.ps1` + `Directory.psm1` + `index-new.html` and
+  restarted `DSMT-Api` before re-diagnosing any bug already fixed in
+  3.38.0/3.38.1 - several "still broken" reports in this session turned out
+  to be the OLD binary still running.
 - The `-SetupViaBrowser` + existing-install path now keeps settings; wizard
   shows "Setup already complete" (409) if someone tries to re-save - the
   console should render that message nicely (check next field round).
