@@ -123,11 +123,45 @@ Write-Host "---------------------------------------------------------" -Foregrou
 # ===========================================================================
 Step "Collect configuration"
 
+# --- Existing installation? Load its config.json FIRST so a re-run keeps ----
+# working settings: existing values become the defaults for every question,
+# and -SetupViaBrowser no longer blanks a working configuration (which used
+# to drop the API back into setup mode and lock out existing accounts).
+$existingCfg = $null
+foreach ($candidate in @((Join-Path $InstallDir "server\config.json"), (Join-Path $here "config.json"))) {
+    if (Test-Path $candidate) {
+        try { $existingCfg = Get-Content $candidate -Raw | ConvertFrom-Json; break } catch {}
+    }
+}
+if ($existingCfg) {
+    Note "Existing installation detected - current settings are kept unless you override them."
+    if ($existingCfg.Database) {
+        if (-not $PSBoundParameters.ContainsKey('SqlServer') -and $existingCfg.Database.Server) { $SqlServer = [string]$existingCfg.Database.Server }
+        if (-not $PSBoundParameters.ContainsKey('SqlPort')   -and $existingCfg.Database.Port)   { $SqlPort   = [int]$existingCfg.Database.Port }
+        if (-not $PSBoundParameters.ContainsKey('DbName')    -and $existingCfg.Database.Name)   { $DbName    = [string]$existingCfg.Database.Name }
+        if (-not $PSBoundParameters.ContainsKey('SqlAuth')   -and $existingCfg.Database.Auth)   { $SqlAuth   = [string]$existingCfg.Database.Auth }
+        if (-not $PSBoundParameters.ContainsKey('SqlUser')     -and $existingCfg.Database.User)     { $SqlUser     = [string]$existingCfg.Database.User }
+        if (-not $PSBoundParameters.ContainsKey('SqlPassword') -and $existingCfg.Database.Password) { $SqlPassword = [string]$existingCfg.Database.Password }
+        if (-not $PSBoundParameters.ContainsKey('EncryptSql')) { $EncryptSql = [bool]$existingCfg.Database.Encrypt }
+    }
+    if ($existingCfg.Directory) {
+        if (-not $PSBoundParameters.ContainsKey('LdapServer') -and $existingCfg.Directory.LdapServer) { $LdapServer = [string]$existingCfg.Directory.LdapServer }
+        if (-not $PSBoundParameters.ContainsKey('BaseDN')     -and $existingCfg.Directory.BaseDN)     { $BaseDN     = [string]$existingCfg.Directory.BaseDN }
+        if (-not $PSBoundParameters.ContainsKey('Domains')    -and $existingCfg.Directory.Domains)    { $Domains    = @($existingCfg.Directory.Domains) }
+    }
+    if ($existingCfg.Sync -and -not $PSBoundParameters.ContainsKey('AdConnectServer') -and $existingCfg.Sync.ADConnectServer) { $AdConnectServer = [string]$existingCfg.Sync.ADConnectServer }
+    if ($existingCfg.CertificateAuthority -and -not $PSBoundParameters.ContainsKey('CaConfigString') -and $existingCfg.CertificateAuthority.ConfigString) { $CaConfigString = [string]$existingCfg.CertificateAuthority.ConfigString }
+}
+
 if ($SetupViaBrowser) {
     Note "Browser-setup mode: SQL / directory / admin questions are skipped."
-    Note "You will complete them in the web setup wizard after the service starts."
-    $SqlServer = ""; $DbName = ""; $SqlUser = ""; $SqlPassword = ""
-    $LdapServer = ""; $BaseDN = ""
+    if ($existingCfg) {
+        Note "Existing settings were found and are KEPT - the web wizard will show them prefilled."
+    } else {
+        Note "You will complete them in the web setup wizard after the service starts."
+        $SqlServer = ""; $DbName = ""; $SqlUser = ""; $SqlPassword = ""
+        $LdapServer = ""; $BaseDN = ""
+    }
 }
 
 if (-not $SetupViaBrowser) {
@@ -259,6 +293,9 @@ if (-not $SkipPrereqs) {
 
 # ===========================================================================
 # 2) Write config.json
+#    Re-running the installer over an EXISTING installation must not wipe
+#    working settings: any value the operator did not explicitly pass on the
+#    command line is taken from the existing config.json instead of a default.
 # ===========================================================================
 Step "Write config.json"
 $cfg = [ordered]@{
@@ -384,19 +421,28 @@ Import-Module (Join-Path $here "modules\Db.psm1")   -Force
 Import-Module (Join-Path $here "modules\Auth.psm1") -Force
 Initialize-Db -DbConfig $cfg.Database
 
-if (-not $LocalAdminPassword) {
-    $LocalAdminPassword = Read-Host "Set a password for local '$LocalAdminUser'" -AsSecureString
-}
-$plain = [System.Net.NetworkCredential]::new('', $LocalAdminPassword).Password
-if ([string]::IsNullOrWhiteSpace($plain)) { throw "Local administrator password cannot be empty." }
-$h = New-PasswordHash -Password $plain
-Invoke-Sql @'
-MERGE dbo.LocalAccounts AS t USING (SELECT @u AS Username) AS s ON t.Username=s.Username
-WHEN MATCHED THEN UPDATE SET PwHash=@h, PwSalt=@s, Iterations=@i, Enabled=1
-WHEN NOT MATCHED THEN INSERT(Username,ConsoleRole,PwHash,PwSalt,Iterations,Enabled,BuiltIn)
-  VALUES(@u,'Local Administrator',@h,@s,@i,1,1);
+# Re-running the installer must NEVER overwrite the password of an account
+# that already exists (that locked people out of consoles that already
+# worked). Password resets are an explicit maintenance action:
+#     .\Install.ps1 -SeedLocalAdmin
+$adminExists = 0
+try { $adminExists = [int](Invoke-Sql 'SELECT COUNT(*) FROM dbo.LocalAccounts WHERE Username=@u' @{ u=$LocalAdminUser } -Scalar) } catch {}
+if ($adminExists -gt 0) {
+    Ok "Local administrator '$LocalAdminUser' already exists - password kept as-is."
+    Note "To reset it, run:  .\Install.ps1 -SeedLocalAdmin"
+} else {
+    if (-not $LocalAdminPassword) {
+        $LocalAdminPassword = Read-Host "Set a password for local '$LocalAdminUser'" -AsSecureString
+    }
+    $plain = [System.Net.NetworkCredential]::new('', $LocalAdminPassword).Password
+    if ([string]::IsNullOrWhiteSpace($plain)) { throw "Local administrator password cannot be empty." }
+    $h = New-PasswordHash -Password $plain
+    Invoke-Sql @'
+INSERT INTO dbo.LocalAccounts(Username,ConsoleRole,PwHash,PwSalt,Iterations,Enabled,BuiltIn)
+VALUES(@u,'Local Administrator',@h,@s,@i,1,1);
 '@ @{ u=$LocalAdminUser; h=$h.Hash; s=$h.Salt; i=$h.Iterations } -NonQuery | Out-Null
-Ok "Local administrator '$LocalAdminUser' set."
+    Ok "Local administrator '$LocalAdminUser' created."
+}
 
 }  # end of database + admin steps (skipped with -SetupViaBrowser)
 
