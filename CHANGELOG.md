@@ -1,5 +1,12 @@
 # Changelog
 All notable changes to the Directory Services Management Tool.
+## 3.38.5 (API only)
+Fixed a confusing "ghost" mapping row the user found in the field: `Settings -> Access & Permissions` showed a mapping with a role selected but no group name, and the "Connect an LDAP admin group" setup banner kept reappearing even after a real mapping had been saved - looking exactly like "the setting I just added disappeared."
+
+- **Root cause**: `dbo.RoleMappings` had a stale row with an empty `LdapGroup` (pre-dating the empty-value validation already present in `POST /api/access/mappings`, which has always rejected a blank group with a 400 - confirmed this can't be produced by current code, only leftover data). `GET /api/access/mappings` returned it unfiltered, so the console rendered a mapping row with no group text - the exact symptom that reads as "vanished."
+- **Fix**: `GET /api/access/mappings` now skips any row with a blank `LdapGroup`; the `/api/alerts` "Connect an LDAP admin group" check now also requires a non-blank group before it counts a `System Administrator` mapping as satisfied, so the setup banner and the mapping list agree with each other.
+- The underlying stale row still exists in the database (the fix hides it, doesn't delete it) - harmless since it's now filtered everywhere it's read, but a `DELETE FROM dbo.RoleMappings WHERE LdapGroup IS NULL OR LdapGroup=''` cleans it up if wanted.
+
 ## 3.38.4 (index-new.html + API)
 Continued the mandatory fake-data audit from 3.38.3 into the rest of the codebase (user: "אין שום דבר נוסף בקוד שאתה יכול לבדוק? אם יש אז תבדוק").
 
