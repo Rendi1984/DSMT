@@ -1,5 +1,14 @@
 # Changelog
 All notable changes to the Directory Services Management Tool.
+## 3.38.2 (index-new.html + API + Directory.psm1 + Diagnostics.psm1)
+Field-testing follow-up: stop showing demo/placeholder data as if it were real, and stop mislabeling a successful "zero results" query as a failure.
+
+- **System Team -> Groups now lists REAL AD groups**: this page previously showed a fixed set of 6 hardcoded demo group names (`SG-HafalaTools-Access`, `GG-Hafala-Team`, ...) that have no relationship to any actual domain - clicking one only worked by coincidence if a real group happened to share that exact name, and 400'd otherwise (confirmed in the field logs: `SG-PasswordReset-Operators`, `GG-Hafala-Team`, `SG-ReadOnly-Auditors`, `SG-HafalaTools-Access` all 400'd; only `SG-SystemTeam-Admins` happened to exist for real). New `Get-AllGroups` (`Directory.psm1`) + `GET /api/groups` return the domain's actual groups; the console loads this list on Live sign-in and no longer offers a group that doesn't exist.
+- **System Team -> Scheduled Jobs now lists only the tasks DSMT itself registers**: same problem, same fix - the page showed 6 fake job names (`AD Connect Delta Sync`, `Group Membership Export`, ...) that were never real Windows Scheduled Tasks, so "Run now" always failed. New `GET /api/jobs` lists only tasks named `DSMT-*` (currently just `DSMT-DiagReport`, registered when the Diagnostics report schedule is enabled) - deliberately NOT every task on the machine, since unrelated software's tasks aren't something this console can act on either. Shows a clear "no scheduled tasks" message when none are registered, instead of a demo list or a blank table.
+- **Event Viewer: "no events found" is a successful empty result, not an error**: `Get-WinEvent` throws when a filter is valid but matches zero events - `Get-RemoteEvents` (`Diagnostics.psm1`) now catches exactly that message and returns an empty list, so the console shows a normal "no events" state instead of a red "query failed" box for what was actually a correct, working query.
+- **Certificate Authority consolidated**: the unused Settings -> Certificate Authority tab ("This tab isn't part of the demo") is removed. CA server configuration (host + common name) moved into Settings -> General as its own section (`GET/POST` via `/api/config` and `/api/ca/config`); actual certificate management (list/issue/approve/revoke) stays exactly where it already works, System Team -> Certificate Authority.
+- Verified end-to-end against the mock API (extended with real-shaped `/api/groups` and `/api/jobs` responses): Groups/Jobs pages show only the mock's real names, demo names are gone, CA tab is gone from Settings, CA fields appear in General. Zero page errors.
+
 ## 3.38.1 (index-new.html + Directory.psm1)
 Field-testing follow-up: found and fixed the actual root cause of the permanent "[bundle] error" banner shown at the bottom of every screenshot in the last round.
 

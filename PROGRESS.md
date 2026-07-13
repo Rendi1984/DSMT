@@ -7,11 +7,31 @@ useful context under "Notes" so a fresh session (with no chat history) can
 pick up immediately.
 
 ## Current version
-3.38.1 (index-new.html preview) / 3.32.3 (shipped index.html console) — see
+3.38.2 (index-new.html preview) / 3.32.3 (shipped index.html console) — see
 `CHANGELOG.md` for the authoritative log.
 
 ## Open tasks
-- **v3.38.1 shipped (this session)**: found the actual root cause of the
+- **v3.38.2 shipped (this session)**: the user pushed back hard on demo/
+  placeholder data appearing anywhere Live mode is active ("לא להציג נתונים
+  כוזבים במערכת" - don't show fake data in the system). Confirmed via field
+  request logs that System Team -> Groups and -> Scheduled Jobs were BOTH
+  fixed hardcoded demo lists with zero connection to the real domain/task
+  scheduler - every click either coincidentally worked (if a real group
+  happened to share the demo name) or 400'd. Fixed:
+  - `GET /api/groups` (new, `Get-AllGroups` in Directory.psm1) - real AD
+    groups, loaded on Live sign-in, replaces the 6-item demo array.
+  - `GET /api/jobs` (new) - lists ONLY tasks named `DSMT-*` (i.e. tasks this
+    app itself registers, currently just `DSMT-DiagReport`) - explicitly
+    NOT every scheduled task on the machine, confirmed with the user this
+    is the right scope ("רק מה שאני בונה / מייצר" - only what I build).
+  - Event Viewer "No events were found" (a normal empty result) was being
+    surfaced as a red error box - `Get-RemoteEvents` now catches that
+    specific Get-WinEvent exception and returns an empty array.
+  - Settings -> Certificate Authority tab removed (was an unused
+    placeholder); CA host/common-name config moved into Settings -> General
+    as its own section. Cert management itself untouched, still only in
+    System Team -> Certificate Authority.
+- **v3.38.1 shipped (prior session)**: found the actual root cause of the
   permanent "[bundle] error" banner the user saw on every screenshot -
   index-new.html loaded Google Fonts from a CDN (fonts.googleapis.com),
   which fails ERR_NAME_NOT_RESOLVED on the air-gapped server and trips the

@@ -282,7 +282,17 @@ function Get-RemoteEvents {
     )
     $filter = @{ LogName = $LogName; StartTime = (Get-Date).AddHours(-1 * $Hours) }
     if ($Levels -and $Levels.Count -gt 0) { $filter['Level'] = $Levels }
-    $events = @(Get-WinEvent -ComputerName $Server -FilterHashtable $filter -MaxEvents $Top -ErrorAction Stop)
+    # Get-WinEvent throws "No events were found that match the specified
+    # selection criteria" when the filter is valid but simply matches zero
+    # events - a normal, successful outcome (nothing happened), not a
+    # failure. Without this the API returned it as a 400 and the console
+    # rendered a red "query failed" error for what is really an empty result.
+    try {
+        $events = @(Get-WinEvent -ComputerName $Server -FilterHashtable $filter -MaxEvents $Top -ErrorAction Stop)
+    } catch {
+        if ($_.Exception.Message -match 'No events were found') { return @() }
+        throw
+    }
     $rows = $events | ForEach-Object {
         $msg = [string]$_.Message
         if ($msg.Length -gt 400) { $msg = $msg.Substring(0, 400) + '...' }
