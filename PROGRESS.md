@@ -7,11 +7,33 @@ useful context under "Notes" so a fresh session (with no chat history) can
 pick up immediately.
 
 ## Current version
-3.38.5 (index-new.html preview, API-only change - console literal not
-bumped per versioning policy) / 3.32.3 (shipped index.html console) — see
-`CHANGELOG.md` for the authoritative log.
+4.0.0 (index.html + API) — see `CHANGELOG.md` for the authoritative log.
+**`index-new.html` no longer exists** - it has been merged into `index.html`.
+There is a single console file again. Do not look for or recreate
+`index-new.html`; all console work happens directly in `index.html` now.
 
 ## Open tasks
+- **v4.0.0 shipped (this session)**: user explicitly asked to merge
+  `index-new.html` into `index.html` ("כן תוסיף ותמזג את הקובץ index-new
+  לתוך קובץ index.html"), promoting the entire redesign (built across
+  3.31.0-3.38.5) to the production console for the first time. Before
+  merging: added Live session persistence (token was previously in-memory
+  only - any F5 silently logged the user out and discarded unsaved form
+  input, which the user had just field-reported as "my setting
+  disappeared"), and fixed two version-display spots (Overview badge,
+  buildConfig()) that had been silently stuck on stale `3.32.3` for the
+  entire redesign series - replaced ALL hardcoded version literals with a
+  single `VERSION` class field. Removed remaining "index-new.html"/"demo"
+  wording from the UI. Verified the full existing 7-file Playwright
+  regression suite still passes at the new `index.html` name/path - zero
+  errors. Old `index.html` content is gone (replaced, not merged
+  feature-by-feature) - `index-new.html` was always a strict superset of
+  `index.html`'s features (it was built to replace it), so nothing from
+  the old shipped console was lost.
+- **Still open / worth a follow-up round**: real certificate issuance +
+  real CA templates (currently list/approve/revoke only, tracked since
+  3.38.0); continue the live button-by-button audit now that this is the
+  actual shipped console the user will use daily instead of a preview.
 - **v3.38.5 shipped (this session)**: user field-reported a mapping row in
   Settings -> Access & Permissions with a role selected but no group name,
   and the "Connect an LDAP admin group" banner reappearing after saving a
