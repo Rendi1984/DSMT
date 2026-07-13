@@ -154,6 +154,15 @@ All scripts must be **Windows PowerShell 5.1 compatible**:
 - Demo mode: returns fake data. Live mode: calls real API
 - All Live-mode branches must check `if (this.state.connMode === 'live')` before calling apiFetch
 
+### No fake data in Live mode (MANDATORY audit before calling console work done)
+Every page has a hardcoded demo array as a class field (`GROUPS`, `AUDIT`, `CA_TEMPLATES`, `PWEXP_DATA`, etc.) for Demo mode. History: three separate rounds of real-world testing found pages that rendered this demo data **unconditionally**, even signed into Live mode against a real server — `System Team → Groups`/`Scheduled Jobs` showed fixed fake names that didn't exist in the real AD/Task Scheduler (every click 400'd), and `Audit Log` showed static fake entries with **zero** live fetch wired at all, despite `/api/audit` already existing and working server-side. The user's own words after finding this twice: "לא להציג נתונים כוזבים במערכת" (don't show fake data in the system).
+
+Before considering ANY console change or session complete, grep the decoded template for every `NAME = [` class-field array (`python3 -c "... t.count('\n  NAME = [')..."` per the edit-script pattern above) and for each one check:
+1. Is it real UI/nav config (role names, palette list, tab labels, static specs of the app's own fixed behavior)? — fine to leave hardcoded.
+2. Is it presented as if it reflects the real domain/server/database (a list of groups, users, jobs, audit events, certificates, anything with real-world names/timestamps)? — MUST have a `*Live` counterpart that fetches from a real API route and is used instead whenever `connMode === 'live'`, with the demo array only reachable in Demo mode. If the backend route doesn't exist yet, build it — do not ship a page that silently shows fake data instead.
+3. If a *Live function already exists but isn't called anywhere (dead code) or the corresponding renderVals computed value still references the demo array unconditionally, that is the exact bug pattern to search for — grep `this.DEMO_ARRAY_NAME` usages and confirm each one is behind a `connMode==='live'` check with a loaded-live-data fallback, not used bare.
+4. Also check field-name casing: API routes that return raw SQL rows (`Invoke-Sql` results) must map to lowercase keys explicitly (`@{ time=...; actor=...; }`) — returning a raw SQL row hashtable straight through `Write-PodeJsonResponse` sends PascalCase keys that silently don't match what the console reads, and the page looks "empty"/wrong with no visible error.
+
 ---
 
 ## Known environment facts
