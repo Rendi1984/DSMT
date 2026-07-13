@@ -28,6 +28,27 @@ function Get-DirectoryUsers {
         }
 }
 
+function Get-AllGroups {
+    <# Lists real AD groups so the console's Groups page shows actual
+       group names instead of a fixed demo list that has no relationship
+       to any given domain - selecting one always failed against a real
+       AD unless its name happened to match the demo mockup by chance. #>
+    param([string] $Query = '', [int] $Top = 200)
+    Assert-ADModule
+    $filter = if ($Query) { "Name -like '*$Query*'" } else { '*' }
+    Get-ADGroup -Filter $filter -Properties Description, GroupCategory, GroupScope, Members -ResultSetSize $Top |
+        Sort-Object Name |
+        ForEach-Object {
+            [pscustomobject]@{
+                name        = $_.Name
+                description = $_.Description
+                category    = "$($_.GroupCategory)"
+                scope       = "$($_.GroupScope)"
+                memberCount = @($_.Members).Count
+            }
+        }
+}
+
 function Get-GroupMembers {
     param([Parameter(Mandatory)][string] $GroupName)
     Assert-ADModule

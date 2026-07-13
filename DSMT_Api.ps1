@@ -479,6 +479,7 @@ VALUES(@u,'Local Administrator',@h,@sa,@i,1,1);
         $cfg = $using:Config
         Write-PodeJsonResponse -Value @{
             directory = @{ ldapServer = $cfg.Directory.LdapServer; baseDN = $cfg.Directory.BaseDN; domains = @($cfg.Directory.Domains); ssoEnabled = [bool]$cfg.Directory.SsoEnabled }
+            certificateAuthority = @{ host = $cfg.CertificateAuthority.Host; commonName = $cfg.CertificateAuthority.CommonName }
             sql       = (Get-Config)
         }
     }
@@ -546,6 +547,17 @@ VALUES(@u,'Local Administrator',@h,@sa,@i,1,1);
     Add-PodeRoute -Method Get -Path '/api/dl/:group' -ScriptBlock {
         if (-not (Get-Session $WebEvent)) { Write-401; return }
         try { Write-PodeJsonResponse -Value @{ members = @(Get-GroupMembers -GroupName $WebEvent.Parameters['group']) } }
+        catch { Write-ApiError $_ }
+    }
+
+    # ---------- GROUPS (System Team -> Groups) ----------
+    # Real AD groups, not a fixed demo list - a hardcoded set of group names
+    # has no relationship to what actually exists in any given domain, and
+    # selecting one always 400'd unless its name happened to match by luck.
+    Add-PodeRoute -Method Get -Path '/api/groups' -ScriptBlock {
+        if (-not (Get-Session $WebEvent)) { Write-401; return }
+        $q = $WebEvent.Query['q']
+        try { Write-PodeJsonResponse -Value @{ groups = @(Get-AllGroups -Query $q) } }
         catch { Write-ApiError $_ }
     }
 
@@ -1159,6 +1171,30 @@ WHEN NOT MATCHED THEN INSERT(Username,ConsoleRole,PwHash,PwSalt,Iterations,Enabl
     }
 
     # ---------- SCHEDULED JOBS (Windows Task Scheduler) ----------
+    # Lists only the scheduled tasks THIS application registers (the
+    # 'DSMT-' prefix, e.g. DSMT-DiagReport from Settings > Notifications /
+    # Diagnostics) - not every task on the machine. A fixed demo list of
+    # unrelated job names had no relationship to what actually exists, and
+    # listing the whole Task Scheduler library would be equally irrelevant
+    # noise (other software's tasks, none of which this console can act on).
+    Add-PodeRoute -Method Get -Path '/api/jobs' -ScriptBlock {
+        if (-not (Get-Session $WebEvent)) { Write-401; return }
+        try {
+            $rows = @(Get-ScheduledTask | Where-Object { $_.TaskName -like 'DSMT-*' } | ForEach-Object {
+                $info = Get-ScheduledTaskInfo -InputObject $_ -ErrorAction SilentlyContinue
+                @{
+                    name        = $_.TaskName
+                    path        = $_.TaskPath
+                    enabled     = ($_.State -ne 'Disabled')
+                    state       = "$($_.State)"
+                    lastRunTime = if ($info) { "$($info.LastRunTime)" } else { $null }
+                    nextRunTime = if ($info) { "$($info.NextRunTime)" } else { $null }
+                    lastResult  = if ($info) { $info.LastTaskResult } else { $null }
+                }
+            })
+            Write-PodeJsonResponse -Value @{ jobs = $rows }
+        } catch { Write-ApiError $_ }
+    }
     Add-PodeRoute -Method Post -Path '/api/jobs/:name/toggle' -ScriptBlock {
         $s = Get-Session $WebEvent; if (-not $s) { Write-401; return }
         $name    = $WebEvent.Parameters['name']
