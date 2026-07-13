@@ -107,7 +107,7 @@ finishing:
 
 ---
 
-## Current version: 3.29.22 (API + Console)
+## Current version: 4.0.0 (API + Console)
 Check `CHANGELOG.md` (top entry) for the authoritative current version before
 picking the next number.
 
@@ -117,13 +117,14 @@ Format: `MAJOR.FEATURE.FIX`
 - FEATURE: new feature (reset FIX to 0)
 - FIX: bug fix only
 
-Bump version in ALL these places when changing index.html:
-1. Sidebar label (`v3.22.x`)
-2. Overview badge
-3. About modal
-4. Installer-wizard label
-5. `buildConfig()` version field
-6. Sign-in screen, under the Demo/Live toggle (added 3.31.1)
+**Single source of truth (since 4.0.0):** `index.html` has one `VERSION = 'X.Y.Z'` class
+field; every place the version is shown (sidebar footer, About modal, Overview badge,
+`buildConfig()`, sign-in screen, setup-wizard label) reads it via `this.VERSION` /
+`{{ appVersion }}`, not a hardcoded literal. Bump the one class field only — do not
+hand-edit any of those six display spots individually. (Before 4.0.0 those six spots
+each hardcoded their own literal; that scheme silently rotted — two of the six were
+stuck on a stale version for months across many releases before anyone noticed. Never
+reintroduce per-spot literals.)
 
 ---
 

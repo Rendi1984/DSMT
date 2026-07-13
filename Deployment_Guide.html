@@ -735,9 +735,9 @@ notepad config.json</pre><p>Set <strong>Database</strong>, <strong>Directory</st
         <h4>To configure</h4>
         <p>Add at least one mapping to <strong>System Administrator</strong> — this is the “Connect an LDAP admin group” setup task. The LDAP security group field (3.32.2+) is free text - type either the group's sAMAccountName (e.g. <code>SG-SystemTeam-Admins</code>) or its full DN (e.g. <code>CN=SG-SystemTeam-Admins,OU=Groups,DC=lab,DC=local</code>); there's no fixed picklist to create the group against first.</p>
         <p>Creating a local break-glass account now has its own password field in the form (3.32.2+) - a browser <code>prompt()</code> popup used to ask for it separately, which read as if the dialog wanted the username again since it echoed it back in the message text.</p>
-        <div class="callout warn" style="margin:12px 0 0;">
+        <div class="callout" style="margin:12px 0 0;">
           <div class="dot"></div>
-          <p><strong>MFA/SSO backend is real (3.33.0); console wiring is preview-only</strong> The API now genuinely verifies a TOTP code server-side (RFC 6238, <code>Auth.psm1</code>) and can trust an IIS-forwarded Windows identity for SSO — see “Two-factor authentication (MFA)” and “Single sign-on (SSO)” below. Turning the toggles on/off and completing enrollment currently only works from the <code>index-new.html</code> redesign preview, not yet the shipped <code>index.html</code> console.</p>
+          <p><strong>MFA/SSO (since 3.33.0, shipped in the console since 4.0.0)</strong> The API genuinely verifies a TOTP code server-side (RFC 6238, <code>Auth.psm1</code>) and can trust an IIS-forwarded Windows identity for SSO — see “Two-factor authentication (MFA)” and “Single sign-on (SSO)” below. Toggling and enrollment work directly from <code>index.html</code>.</p>
         </div>
         <div class="feature-meta"><code>GET/POST/DELETE /api/access/mappings</code><code>GET/POST /api/access/local</code><code>POST /api/access/local/:id/toggle</code><code>POST /api/config</code> (<code>directory.ssoEnabled</code>)</div>
       </div>
@@ -894,7 +894,7 @@ notepad config.json</pre><p>Set <strong>Database</strong>, <strong>Directory</st
 
     <div class="callout note" style="margin-top:60px;">
       <div class="dot"></div>
-      <p><strong>Version</strong> This guide describes DSMT 3.38.5 (index-new.html preview) / 3.32.3 (shipped index.html console). See <code>CHANGELOG.md</code> for the full release history.</p>
+      <p><strong>Version</strong> This guide describes DSMT 4.0.0. The former redesign-preview file (<code>index-new.html</code>) has been merged into and now IS the shipped <code>index.html</code> console — there is a single console file again. See <code>CHANGELOG.md</code> for the full release history.</p>
     </div>
   </main>
 </div>
