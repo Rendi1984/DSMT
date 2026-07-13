@@ -1,5 +1,14 @@
 # Changelog
 All notable changes to the Directory Services Management Tool.
+## 3.38.3 (index-new.html + API + CLAUDE.md)
+Full audit of every hardcoded demo array in the console for the same "fake data shown as real" bug class found in 3.38.2 (Groups/Scheduled Jobs) - requested directly by the user after that fix: "אז עברת על כל המסמך בשביל למצוא קלטים שגויים? אם לא אז תעבור."
+
+- **Audit Log now shows real data in Live mode**: `System Team -> Audit Log` had ZERO live wiring - `auditRecent`/`auditRows` referenced the static demo `AUDIT` array unconditionally, with no `connMode==='live'` check and no `loadAuditLive` function at all, even though `GET /api/audit` already existed and worked server-side. New `loadAuditLive`, called on Live/SSO sign-in; the page now uses real audit entries once loaded.
+- **`/api/audit` field-casing bug fixed**: the route returned raw SQL row objects straight through `Write-PodeJsonResponse` - PascalCase keys (`Time`, `Actor`, `Action`, `Target`, `Result`, `Kind`) that never matched what the console reads (lowercase) - so even a correctly-wired console would have rendered blank/undefined cells. Now mapped explicitly to lowercase fields, same pattern every other route already uses.
+- **Audited every other hardcoded demo array** (`MATRIX`, `CA_TEMPLATES`, `PWEXP_DATA`, `EV_DATA`, `DL_DATA`, `DC_SERVICES`, `EX_SERVICES`, plus nav/label constants): confirmed all of them are either (a) already correctly gated behind `connMode==='live'` with a working `*Live` fetch counterpart (password expiry, event viewer, DL groups, DC/Exchange service checks), or (b) legitimate static UI config that isn't domain data (role/palette/tab lists, the built-in RBAC capability matrix which documents the app's own fixed role tiers, not customer data). `CA_TEMPLATES` remains a known, already-tracked gap (real cert issuance + real templates is unbuilt feature work, not a data-mislabeling bug) - not touched here.
+- **New standing rule in `CLAUDE.md`**: "No fake data in Live mode" - a mandatory audit checklist (grep every class-field demo array, verify each has a real `*Live` counterpart used behind `connMode==='live'`, check API routes returning raw SQL rows map field casing correctly) that must be run before any console session is considered done, so this bug class doesn't get reintroduced or found piecemeal again.
+- Verified via Playwright against the mock API (extended with a distinctly-named audit entry): Audit Log shows the real mock entry, demo entries are gone. Re-ran the full 3.38.2 regression suite - all still passing. Zero page errors.
+
 ## 3.38.2 (index-new.html + API + Directory.psm1 + Diagnostics.psm1)
 Field-testing follow-up: stop showing demo/placeholder data as if it were real, and stop mislabeling a successful "zero results" query as a failure.
 

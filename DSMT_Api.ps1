@@ -653,8 +653,12 @@ VALUES(@u,'Local Administrator',@h,@sa,@i,1,1);
     # ---------- AUDIT ----------
     Add-PodeRoute -Method Get -Path '/api/audit' -ScriptBlock {
         if (-not (Get-Session $WebEvent)) { Write-401; return }
-        try { Write-PodeJsonResponse -Value @{ events = @(Get-AuditLog -Kind $WebEvent.Query['kind']) } }
-        catch { Write-ApiError $_ }
+        try {
+            $rows = @(Get-AuditLog -Kind $WebEvent.Query['kind'] | ForEach-Object {
+                @{ time = "$($_['Time'])"; actor = [string]$_['Actor']; action = [string]$_['Action']; target = [string]$_['Target']; result = [string]$_['Result']; kind = [string]$_['Kind'] }
+            })
+            Write-PodeJsonResponse -Value @{ events = $rows }
+        } catch { Write-ApiError $_ }
     }
 
     # ---------- CERTIFICATE AUTHORITY ----------

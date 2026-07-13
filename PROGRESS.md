@@ -7,11 +7,23 @@ useful context under "Notes" so a fresh session (with no chat history) can
 pick up immediately.
 
 ## Current version
-3.38.2 (index-new.html preview) / 3.32.3 (shipped index.html console) — see
+3.38.3 (index-new.html preview) / 3.32.3 (shipped index.html console) — see
 `CHANGELOG.md` for the authoritative log.
 
 ## Open tasks
-- **v3.38.2 shipped (this session)**: the user pushed back hard on demo/
+- **v3.38.3 shipped (this session)**: user explicitly asked "did you audit
+  the whole document for bad inputs? if not, do it now." Did a full audit
+  of every hardcoded demo array (`GROUPS`, `AUDIT`, `MATRIX`, `CA_TEMPLATES`,
+  `PWEXP_DATA`, `EV_DATA`, `DL_DATA`, `DC_SERVICES`, `EX_SERVICES`). Found
+  one more real bug: Audit Log had ZERO live wiring at all (no
+  `loadAuditLive`, no connMode check - always showed fake entries even
+  signed into a real server), plus the `/api/audit` route itself returned
+  PascalCase SQL column names instead of the lowercase fields the console
+  reads. Both fixed. Everything else checked out - either already correctly
+  live-gated, or legitimate static UI config (not domain data). Added a
+  MANDATORY standing rule to `CLAUDE.md` ("No fake data in Live mode") so
+  this audit is a required step going forward, not a one-off.
+- **v3.38.2 shipped (prior session)**: the user pushed back hard on demo/
   placeholder data appearing anywhere Live mode is active ("לא להציג נתונים
   כוזבים במערכת" - don't show fake data in the system). Confirmed via field
   request logs that System Team -> Groups and -> Scheduled Jobs were BOTH
