@@ -7,11 +7,33 @@ useful context under "Notes" so a fresh session (with no chat history) can
 pick up immediately.
 
 ## Current version
-3.38.4 (index-new.html preview) / 3.32.3 (shipped index.html console) — see
+3.38.5 (index-new.html preview, API-only change - console literal not
+bumped per versioning policy) / 3.32.3 (shipped index.html console) — see
 `CHANGELOG.md` for the authoritative log.
 
 ## Open tasks
-- **v3.38.4 shipped (this session)**: continued the fake-data audit at the
+- **v3.38.5 shipped (this session)**: user field-reported a mapping row in
+  Settings -> Access & Permissions with a role selected but no group name,
+  and the "Connect an LDAP admin group" banner reappearing after saving a
+  real mapping - looked exactly like "what I did disappeared." Root cause:
+  a stale `dbo.RoleMappings` row with an empty `LdapGroup` (predates the
+  validation in `POST /api/access/mappings`, which has always rejected a
+  blank group - confirmed current code cannot produce this, only leftover
+  data). `GET /api/access/mappings` and the `/api/alerts` admin-mapping
+  check now both filter out blank-group rows. **The stale row still exists
+  in the DB** - filtering hides it everywhere it's read, but if the user
+  wants it gone: `DELETE FROM dbo.RoleMappings WHERE LdapGroup IS NULL OR
+  LdapGroup=''`.
+  - Also clarified for the user (not a bug, just how the browser works):
+    the Live session token (`apiToken`) is NOT persisted to localStorage -
+    `componentDidMount` only restores theme/palette/connMode/apiBase. A
+    full page refresh (F5) always requires signing in again, and any
+    UNSUBMITTED form input (typed but not yet saved) is lost on refresh -
+    normal browser behavior, not DSMT-specific. Worth considering whether
+    session persistence (token in localStorage, auto-resume on load) is
+    wanted as a real feature - not implemented, flagged but not asked for
+    yet.
+- **v3.38.4 shipped (prior session)**: continued the fake-data audit at the
   user's explicit request. Found + fixed `GET /api/secrets` returning raw
   PascalCase SQL columns (same bug class as the audit-log fix). Also
   self-corrected a false positive: briefly thought Secrets had zero live

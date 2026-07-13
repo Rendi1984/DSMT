@@ -632,7 +632,7 @@ VALUES(@u,'Local Administrator',@h,@sa,@i,1,1);
         $alerts = @()
         # Setup task: the console has no LDAP group mapped to the admin role yet.
         try {
-            $adminMaps = @(Get-RoleMappings | Where-Object { $_['ConsoleRole'] -eq 'System Administrator' })
+            $adminMaps = @(Get-RoleMappings | Where-Object { $_['ConsoleRole'] -eq 'System Administrator' -and -not [string]::IsNullOrWhiteSpace([string]$_['LdapGroup']) })
             if ($adminMaps.Count -eq 0) {
                 $alerts += @{ type='Setup'; title='Connect an LDAP admin group'; detail='Map a security group to the System Administrator role (Access Control)'; badge='action required' }
             }
@@ -768,7 +768,14 @@ VALUES(@u,'Local Administrator',@h,@sa,@i,1,1);
     Add-PodeRoute -Method Get -Path '/api/access/mappings' -ScriptBlock {
         if (-not (Get-Session $WebEvent)) { Write-401; return }
         try {
-            $rows = @(Get-RoleMappings | ForEach-Object { @{ id = [int]$_['Id']; group = [string]$_['LdapGroup']; role = [string]$_['ConsoleRole'] } })
+            # Skip any row with a blank LdapGroup - the write route has always
+            # rejected an empty group with a 400, so a row like this can only
+            # be pre-existing stale data (e.g. from testing before that
+            # validation existed), never something a real save just produced.
+            # Rendering it looked exactly like "the mapping I just added
+            # disappeared" - filtering it out here removes the confusion even
+            # for a database that already has the bad row sitting in it.
+            $rows = @(Get-RoleMappings | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_['LdapGroup']) } | ForEach-Object { @{ id = [int]$_['Id']; group = [string]$_['LdapGroup']; role = [string]$_['ConsoleRole'] } })
             Write-PodeJsonResponse -Value @{ mappings = $rows }
         } catch { Write-ApiError $_ }
     }
