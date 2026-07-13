@@ -7,11 +7,24 @@ useful context under "Notes" so a fresh session (with no chat history) can
 pick up immediately.
 
 ## Current version
-3.38.3 (index-new.html preview) / 3.32.3 (shipped index.html console) — see
+3.38.4 (index-new.html preview) / 3.32.3 (shipped index.html console) — see
 `CHANGELOG.md` for the authoritative log.
 
 ## Open tasks
-- **v3.38.3 shipped (this session)**: user explicitly asked "did you audit
+- **v3.38.4 shipped (this session)**: continued the fake-data audit at the
+  user's explicit request. Found + fixed `GET /api/secrets` returning raw
+  PascalCase SQL columns (same bug class as the audit-log fix). Also
+  self-corrected a false positive: briefly thought Secrets had zero live
+  wiring like Audit Log did, but `loadAccessLive` (already existing) was
+  already fetching `/api/secrets` on every sign-in - removed the redundant
+  new function before shipping, verified via Playwright request-count
+  assertion that the route is called exactly once, not duplicated. Full
+  sweep of every other `Invoke-Sql`-backed route, every `*Live` function
+  (checked for orphans), and every template button binding - no further
+  issues found. The codebase appears to be genuinely clean of this bug
+  class now, across three consecutive full-audit passes (3.38.2, 3.38.3,
+  3.38.4).
+- **v3.38.3 shipped (prior session)**: user explicitly asked "did you audit
   the whole document for bad inputs? if not, do it now." Did a full audit
   of every hardcoded demo array (`GROUPS`, `AUDIT`, `MATRIX`, `CA_TEMPLATES`,
   `PWEXP_DATA`, `EV_DATA`, `DL_DATA`, `DC_SERVICES`, `EX_SERVICES`). Found

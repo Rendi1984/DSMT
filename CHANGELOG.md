@@ -1,5 +1,13 @@
 # Changelog
 All notable changes to the Directory Services Management Tool.
+## 3.38.4 (index-new.html + API)
+Continued the mandatory fake-data audit from 3.38.3 into the rest of the codebase (user: "אין שום דבר נוסף בקוד שאתה יכול לבדוק? אם יש אז תבדוק").
+
+- **`GET /api/secrets` field-casing fixed**: returned raw PascalCase SQL columns (`Name`, `Account`, `UpdatedAt`) straight through, same bug class as the 3.38.3 audit fix - now mapped explicitly to `id`/`label`/`ref`/`rotated`, matching the shape the console already expects.
+- **Correction to the audit process itself**: initially (mis)diagnosed Secrets as having zero live wiring, like Audit Log - added a new `loadSecretsLive`. Turned out wrong: `loadAccessLive` (already existing, called on every Live/SSO sign-in) already fetched `/api/secrets` and defensively handled both PascalCase and lowercase field names client-side. The redundant new function was removed before shipping; the actual fix is just cleaning up that defensive client-side casing workaround now that the API returns the correct shape directly, and confirming (via a request-count assertion in the Playwright check) that `/api/secrets` is called exactly once at sign-in, not twice.
+- **Full sweep completed**: checked every `Invoke-Sql`-backed route across `DSMT_Api.ps1` for the same PascalCase-leak pattern (`Get-RoleMappings`, `Get-VCenterConnections`, `Get-VCenterLatestPermissions`, `Get-VCenterSyncHistory`, `Get-Config`, local accounts) - all already correctly mapped. Checked every `*Live` function in the console for orphans (defined but never called) - none found, all 50 are wired. Checked every `onclick`/`onchange`/`oninput` template binding against `renderVals()` output - no missing bindings found.
+- Verified via Playwright: Secrets shows the mock's real entry, demo entries gone, exactly one `GET /api/secrets` call at sign-in (not duplicated). Full 3.38.2/3.38.3 regression suite re-run and still passing. Zero page errors.
+
 ## 3.38.3 (index-new.html + API + CLAUDE.md)
 Full audit of every hardcoded demo array in the console for the same "fake data shown as real" bug class found in 3.38.2 (Groups/Scheduled Jobs) - requested directly by the user after that fix: "אז עברת על כל המסמך בשביל למצוא קלטים שגויים? אם לא אז תעבור."
 
