@@ -740,8 +740,12 @@ VALUES(@u,'Local Administrator',@h,@sa,@i,1,1);
     # ---------- SECRETS (DPAPI-encrypted in SQL) ----------
     Add-PodeRoute -Method Get -Path '/api/secrets' -ScriptBlock {
         if (-not (Get-Session $WebEvent)) { Write-401; return }
-        try { Write-PodeJsonResponse -Value @{ secrets = @(Get-SecretList) } }   # names/metadata only
-        catch { Write-ApiError $_ }
+        try {
+            $rows = @(Get-SecretList | ForEach-Object {
+                @{ id = [string]$_['Name']; label = [string]$_['Name']; ref = [string]$_['Account']; rotated = if ($_['UpdatedAt']) { "$($_['UpdatedAt'])" } else { 'never' } }
+            })
+            Write-PodeJsonResponse -Value @{ secrets = $rows }   # names/metadata only, never values
+        } catch { Write-ApiError $_ }
     }
     Add-PodeRoute -Method Post -Path '/api/secrets' -ScriptBlock {
         $s = Get-Session $WebEvent; if (-not $s) { Write-401; return }
