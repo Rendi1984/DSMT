@@ -160,6 +160,55 @@ There is a single console file again. Do not look for or recreate
   where it left off or try a different angle (e.g. a vCenter-side identity
   provider federation instead of Windows-side delegation).
 
+## Recurring root causes - stubs / missing capability, NOT code bugs to keep "fixing"
+These are the specific cases the user flagged as having come back repeatedly
+across many field-testing rounds. Read this before touching any of them
+again - re-improving an error message or re-wiring the same route a second
+time without addressing the actual item below will not help.
+
+- **Certificate Authority: real issuance + real templates is STILL a stub,
+  never actually built.** `CA_TEMPLATES` in `index.html` is a hardcoded
+  class-field array (template name/validity/key/autoEnroll), never fetched
+  from the real CA. There is no "submit a certificate request" route or UI
+  at all - only list/approve/deny/revoke exist server-side
+  (`CertAuthority.psm1`, `/api/ca/*`). The user has asked for this in at
+  least 3 separate rounds. Every session so far has fixed adjacent things
+  (the 500-on-empty-ConfigString crash in 3.38.0, moving CA config into
+  Settings->General in 3.38.2) without building the actual missing feature.
+  **Do not consider this "handled" until there is a real
+  `Get-CaTemplates`/`New-CertificateRequest`-equivalent backend function and
+  console UI wired to it** - anything short of that is the same stub again.
+- **User Management actions (Reset PW / Lock / Disable / Offboard) will
+  keep failing in this specific lab environment even though the CODE is
+  correct.** Root cause confirmed via real field logs (dsmt-error.log,
+  2026-07-12): the DSMT service account genuinely lacks AD delegation
+  (`Insufficient access rights`/`Access is denied` from Set-ADAccountPassword/
+  Disable-ADAccount). The 3.38.0 fix made this surface as a clear 403 with
+  delegation instructions (see Deployment_Guide's "Active Directory
+  permissions" section) - that IS the correct, complete code-side fix.
+  **If this is reported broken again, the first question is "was the AD
+  delegation grant actually applied in ADUC?", not "what's wrong with the
+  code."** Don't re-touch `Directory.psm1`/the user routes for this without
+  first confirming the delegation step was done.
+- **vCenter sync**: same category as above. Requires PowerCLI installed on
+  the API server AND a reachable vCenter with valid, permissioned
+  credentials. Error surfacing is correct (`Write-ApiError`, PowerCLI-missing
+  hint). End-to-end success has only ever been verified against the mock API
+  in this sandbox, never a real vCenter - if it fails in the field, check
+  `powerCliInstalled` in the connections response and real network
+  reachability before assuming a code regression.
+- **Pattern to check FIRST on any "this button doesn't work" report**:
+  across this whole project, the single most repeated root cause (Groups,
+  Scheduled Jobs, Audit Log, Secrets - found and fixed one at a time across
+  3.38.2/3.38.3/3.38.4, only because the user pushed for a full audit each
+  time) was a page silently using a hardcoded demo array in Live mode
+  instead of a real API call, with no visible error at all since nothing
+  ever failed - it just showed the wrong (fake) data. Before writing a new
+  fix for "X doesn't work," grep whether `this.state.X` in `index.html` is
+  actually populated by a `*Live` fetch called at sign-in, per `CLAUDE.md`'s
+  "No fake data in Live mode" checklist - don't assume a previous session
+  already checked this for every page just because it checked it for some.
+
 ## Notes for next session
 - `index.html` internals: the entire app template (HTML shell + the
   `class Component extends DCLogic {...}` JS body) is stored as one JSON
