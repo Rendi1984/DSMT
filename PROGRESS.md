@@ -144,6 +144,22 @@ There is a single console file again. Do not look for or recreate
 - The `-SetupViaBrowser` + existing-install path now keeps settings; wizard
   shows "Setup already complete" (409) if someone tries to re-save - the
   console should render that message nicely (check next field round).
+## Attempted and deliberately NOT pursued (don't re-investigate from scratch)
+- **vCenter/ESXi auth via the signed-in domain user's own permissions**
+  (delegated auth), instead of the current shared service account.
+  Investigated two real approaches: (1) Kerberos Constrained Delegation
+  from the DSMT API service to vCenter, (2) vCenter SSO's "Solution User +
+  ActAs SAML" delegation. Hit a genuine knowledge/verification limit on the
+  exact WS-Trust wire protocol needed for (2) and could not confirm (1)'s
+  feasibility without a real domain+vCenter test environment. User's
+  explicit decision: stay with the current shared-account model (option 3
+  in that discussion) and revisit only if asked again in the future. If a
+  future session is asked to "let vCenter use the logged-in user's own
+  permissions," this was already looked into once - don't restart the
+  investigation from zero, ask the user first whether they want to pick up
+  where it left off or try a different angle (e.g. a vCenter-side identity
+  provider federation instead of Windows-side delegation).
+
 ## Notes for next session
 - `index.html` internals: the entire app template (HTML shell + the
   `class Component extends DCLogic {...}` JS body) is stored as one JSON
